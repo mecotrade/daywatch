@@ -1,3 +1,4 @@
 yolov3.weights
 background.names
 *.log
+screenshots/
