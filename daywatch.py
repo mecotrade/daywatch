@@ -85,11 +85,10 @@ def add_rect(rects, r, separation=0):
                 
     return rects, merge
 
-def start_watch(url, credentials, 
-                min_size, min_contour_area=1000, sensetivity=16, rectangle_separation=5, 
+def start_watch(url, credentials, min_size, class_names, background_names,
+                min_contour_area=1000, sensetivity=16, rectangle_separation=5,
                 max_output_size=10, confidence_threshold=0.5, iou_threshold=0.5,
-                weights_file='yolov3.weights', names_file='coco.names', log_file='watch.log', 
-                screenshot_folder='screenshots', background=set()):
+                weights_file='yolov3.weights', log_file='watch.log', screenshot_folder='screenshots'):
     
     # init logger
     handler = logging.FileHandler(log_file)
@@ -111,13 +110,6 @@ def start_watch(url, credentials,
             logger.info('  - %s: %s' % (a, v))
     
     # init YOLOv3
-    class_names = []
-    
-    # if detected objects are only from blacklisted classes, screenshot is not saved
-    blacklist_names = set()
-    with open(names_file, 'r') as f:
-        class_names = f.read().splitlines()
-            
     colors = ((np.array(color_palette('hls', 80)) * 255))
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
@@ -212,7 +204,7 @@ def start_watch(url, credentials,
                                             cv2.putText(frame, '%s %.1f%%' % (name, box[4]*100), (x_obj, y_obj), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, class_colors[name], 1)
                                             objects[name] += [[x_obj, y_obj, w_obj, h_obj, box[4]]]
 
-                                if len(set(objects.keys()) - background) > 0:
+                                if len(set(objects.keys()) - background_names) > 0:
                                     logger.info('[%s] %s' % (current_time.strftime('%Y%m%d%H%M%S%f'), {n: r for n, r in objects.items()}))
                                     screenshot = True
             
@@ -274,19 +266,33 @@ if __name__ == '__main__':
     parser.add_argument('-wf', '--weights_file', default='yolov3.weights',
                         help='file with YOLOv3 weights. Must be downloaded from https://pjreddie.com/media/files/yolov3.weights')
     parser.add_argument('-nf', '--names-file', default='coco.names',
-                        help='text file with COCO classes names; if name is prefixed with "-", the name is blacklisted and detected objects will not be screenshoted')
+                        help='text file with COCO classes names, one name per line')
     parser.add_argument('-lf', '--log-file', default='watch.log',
                         help='log file')
     parser.add_argument('-sf', '--screenshot-folder', default='screenshots',
                         help='folders for screenshots to be stored')
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
+    parser.add_argument('-bf', '--backgound-file',
+                        help='text file with background classes, objects of such classes do not trigger screenshot, one line per class, the order is not important')
     
     args = parser.parse_args()
-    
+
+    # load COCO class names
+    with open(args.names_file, 'r') as f:
+        class_names = f.read().splitlines()
+
+    # load backgound classes, if filename provided
+    background_names = set(args.background)
+    if args.backgound_file:
+        with open(args.backgound_file, 'r') as f:
+            background_names.update(f.read().splitlines())
+
     start_watch(url=args.url,
                 credentials=args.credentials,
-                min_size=args.min_rectangle_size, 
+                min_size=args.min_rectangle_size,
+                class_names=class_names,
+                background_names=background_names,
                 min_contour_area=args.min_contour_area, 
                 sensetivity=args.sensetivity, 
                 rectangle_separation=args.rectangle_separation,
@@ -294,7 +300,5 @@ if __name__ == '__main__':
                 confidence_threshold=args.confidence_threshold, 
                 iou_threshold=args.iou_threshold,
                 weights_file=args.weights_file,
-                names_file=args.names_file,
                 log_file=args.log_file,
-                screenshot_folder=args.screenshot_folder,
-                background=set(args.background))
+                screenshot_folder=args.screenshot_folder)
