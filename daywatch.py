@@ -273,7 +273,7 @@ if __name__ == '__main__':
                         help='folders for screenshots to be stored')
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
-    parser.add_argument('-bf', '--backgound-file',
+    parser.add_argument('-bf', '--background-file',
                         help='text file with background classes, objects of such classes do not trigger screenshot, one line per class, the order is not important')
     
     args = parser.parse_args()
@@ -284,8 +284,8 @@ if __name__ == '__main__':
 
     # load backgound classes, if filename provided
     background_names = set(args.background)
-    if args.backgound_file:
-        with open(args.backgound_file, 'r') as f:
+    if args.background_file:
+        with open(args.background_file, 'r') as f:
             background_names.update(f.read().splitlines())
 
     start_watch(url=args.url,
