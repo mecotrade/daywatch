@@ -1,5 +1,5 @@
 # daywatch
-The project main goal is to detect and recognize moving objects using street camera raw stream. Pretrained [YOLOv3 model](https://pjreddie.com/darknet/yolo/) is used as recognizer. When one or more object is detected, the screenshot is saved. It is possible to manage background classes, objects of such classes do not trigger screenshot. 
+The project main goal is to detect and recognize moving objects using street camera raw stream. Pretrained [YOLOv3 model](https://pjreddie.com/darknet/yolo/) is used as recognizer. When one or more object is detected, the screenshot is saved. It is possible to manage background classes, objects of such classes do not trigger screenshot. The YOLOv3 part of the project is based on original [Kaggle notebook](https://www.kaggle.com/aruchomu/yolo-v3-object-detection-in-tensorflow).
 
 ## Dependencies
 * Python 3.6.x
