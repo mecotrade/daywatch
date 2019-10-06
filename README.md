@@ -11,7 +11,7 @@ When one or more object is detected, the screenshot can be saved. It is possible
 * Seaborn
 
 ## Weights
-Load YOLOv3 weights from https://pjreddie.com/media/files/yolov3.weights and use key `-w` to provide path for weights file (default is `./yolov3.weights`)
+Load YOLOv3 weights from https://pjreddie.com/media/files/yolov3.weights and use key `-wf` to provide path for weights file (default is `./yolov3.weights`)
 
 ## Getting started
 Use key `-h` to read about all available options
