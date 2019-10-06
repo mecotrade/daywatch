@@ -29,14 +29,16 @@ class FrameProcessor:
 
             # inspect subframes with movement
             objects = self.recognizer(frame, rects)
-            for name, (x, y, w, h, conf) in objects.items():
-                cv2.rectangle(frame, (x, y), (x + w, y + h), self.class_colors[name], 1)
-                cv2.putText(frame, '%s %.1f%%' % (name, conf * 100), (x, y),
-                            cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, self.class_colors[name], 1)
-            if len(set(objects.keys()) - self.background_names) > 0:
+            for name, boxes in objects.items():
+                if name not in self.background_names:
+                    screenshot = True
+                for x, y, w, h, conf in boxes:
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), self.class_colors[name], 1)
+                    cv2.putText(frame, '%s %.1f%%' % (name, conf * 100), (x, y),
+                                cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, self.class_colors[name], 1)
+            if screenshot:
                 self.logger.info('[%s] %s' % (current_time.strftime('%Y%m%d%H%M%S%f'),
-                                         {n: r for n, r in objects.items()}))
-                screenshot = True
+                                              {n: r for n, r in objects.items()}))
 
         # text in the left top of the screen
         cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30),
@@ -62,12 +64,16 @@ class FrameProcessor:
 
         return True
 
+    def __del__(self):
+        cv2.destroyAllWindows()
+
     def save_frame(self, frame_time, frame, prefix=''):
 
-        today_screenshot_dir = os.path.join(self.screenshot_dir, frame_time.strftime('%Y%m%d'))
-        if not os.path.exists(today_screenshot_dir):
-            os.makedirs(today_screenshot_dir)
-            print('Created screenshot directory %s' % today_screenshot_dir)
+        if self.screenshot_dir:
+            today_screenshot_dir = os.path.join(self.screenshot_dir, frame_time.strftime('%Y%m%d'))
+            if not os.path.exists(today_screenshot_dir):
+                os.makedirs(today_screenshot_dir)
+                self.logger.info('Created screenshot directory %s' % today_screenshot_dir)
 
-        cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))), frame,
-                    [cv2.IMWRITE_JPEG_QUALITY, 100])
+            cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))), frame,
+                        [cv2.IMWRITE_JPEG_QUALITY, 100])

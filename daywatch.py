@@ -2,10 +2,10 @@ import cv2
 import urllib.request
 import numpy as np
 import base64
-import datetime
 import time
 import logging
-import inspect
+import queue
+import threading
 from seaborn import color_palette
 import yolov3
 import argparse
@@ -15,12 +15,39 @@ from recognition_engine import RecognitionEngine
 from frame_processor import FrameProcessor
 
 
+# bufferless VideoCapture
+class VideoCapture:
+
+    def __init__(self, name):
+        self.cap = cv2.VideoCapture(name)
+        self.q = queue.Queue()
+        t = threading.Thread(target=self._reader)
+        t.daemon = True
+        t.start()
+
+    # read frames as soon as they are available, keeping only most recent one
+    def _reader(self):
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            while not self.q.empty():
+                try:
+                    self.q.get_nowait()   # discard previous (unprocessed) frame
+                except queue.Queue.Empty:
+                    break
+            self.q.put(frame)
+
+    def read(self):
+        return self.q.get()
+
+
 def get_authorization(credentials):
     base64string = base64.encodebytes(bytes(('%s:%s' % (credentials[0], credentials[1])), 'utf-8')).decode('utf-8').replace('\n','')
     return 'Basic %s' % base64string
 
 
-def start_watch(url, credentials):
+def watch_mjpg(url, credentials):
 
     # start main loop
     loop = True
@@ -33,7 +60,7 @@ def start_watch(url, credentials):
 
             with urllib.request.urlopen(request, timeout=10) as stream:
 
-                print('Communication established at %s' % datetime.datetime.now().strftime('%A %d %B %Y %H:%M:%S.%f')[:-3])
+                logger.info('Communication established')
 
                 data = bytearray()
 
@@ -57,14 +84,20 @@ def start_watch(url, credentials):
                         frame = cv2.imdecode(np.array(jpg), cv2.IMREAD_COLOR)
                         loop = processor(frame)
 
-            # close any open windows
-            cv2.destroyAllWindows()
-
         except Exception as ex:
-            print('Fail establish communication at %s: %s' % (datetime.datetime.now().strftime('%A %d %B %Y %H:%M:%S.%f')[:-3], ex))
+            logger.info('Fail establish communication: %s' % ex)
             time.sleep(10)
-            
-    logger.info('Stop watching')
+
+
+def watch(url):
+
+    cap = VideoCapture(url)
+
+    loop = True
+    while loop:
+
+        frame = cap.read()
+        loop = processor(frame)
 
 
 if __name__ == '__main__':
@@ -94,18 +127,20 @@ if __name__ == '__main__':
                         help='text file with COCO classes names, one name per line')
     parser.add_argument('-lf', '--log-file', default='watch.log',
                         help='log file')
-    parser.add_argument('-sf', '--screenshot-dir', default='screenshots',
-                        help='directory where screenshots is stored')
+    parser.add_argument('-sd', '--screenshot-dir',
+                        help='directory where screenshots is stored, if not set, screenshots are not saved')
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
     parser.add_argument('-bf', '--background-file',
                         help='text file with background classes, objects of such classes do not trigger screenshot, one line per class, the order is not important')
+    parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
+    parser.add_argument('-m', '--mjpg', action='store_true', help='connect to MJPG stream source')
     
     args = parser.parse_args()
 
     # init logger
     handler = logging.FileHandler(args.log_file)
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(logging.DEBUG if args.debug else logging.INFO)
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 
     logger = logging.getLogger('watch')
@@ -115,7 +150,7 @@ if __name__ == '__main__':
     logger.info('Start watching with following configuration:')
     for a, v in vars(args).items():
         # hide password in logs
-        if 'credentials' == a:
+        if 'credentials' == a and v:
             v = [v[0], '******']
         logger.info('  - %s: %s' % (a, v))
 
@@ -124,7 +159,7 @@ if __name__ == '__main__':
         class_names = f.read().splitlines()
     logger.info('COCO class names: %s' % class_names)
 
-    # load background classes, if filename provided
+    # load background classes
     background_names = set(args.background)
     if args.background_file:
         with open(args.background_file, 'r') as f:
@@ -139,4 +174,9 @@ if __name__ == '__main__':
     recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold, args.weights_file)
     processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir)
 
-    start_watch(url=args.url, credentials=args.credentials)
+    if args.mjpg:
+        watch_mjpg(args.url, args.credentials)
+    else:
+        watch(args.url)
+
+    logger.info('Stop watching')
