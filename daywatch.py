@@ -13,6 +13,7 @@ import yolov3
 import argparse
 
 from movement_detector import MovementDetector
+from recognition_engine import RecognitionEngine
 
 
 def get_authorization(credentials):
@@ -55,24 +56,11 @@ def start_watch(url, credentials, min_rect_size, class_names, background_names,
                 v = [v[0], '******']
             logger.info('  - %s: %s' % (a, v))
 
-    # init YOLOv3
     colors = np.array(color_palette('hls', 80)) * 255
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
-    inputs = tf.placeholder(tf.float32, [None, 416, 416, 3])
-    model = yolov3.Yolo_v3(n_classes=len(class_names), model_size=yolov3._MODEL_SIZE,
-                           max_output_size=max_output_size,
-                           iou_threshold=iou_threshold,
-                           confidence_threshold=confidence_threshold)
-    outputs = model(inputs, training=False)
-
-    model_vars = tf.global_variables(scope='yolo_v3_model')
-    assign_ops = yolov3.load_weights(model_vars, weights_file)
-
-    sess = tf.Session()
-    sess.run(assign_ops)
-
     detector = MovementDetector(min_contour_area, min_rect_size, rectangle_separation, sensetivity)
+    recognizer = RecognitionEngine(class_names, max_output_size, iou_threshold, confidence_threshold, weights_file)
 
     # start main loop
     loop = True
@@ -115,39 +103,21 @@ def start_watch(url, credentials, min_rect_size, class_names, background_names,
 
                         rects = detector(frame)
                         if rects:
-                            # TODO replace with YOLO class call!!!!
 
-                            inputs_value = [cv2.resize(frame[y:y + h, x:x + w, :], yolov3._MODEL_SIZE) for x, y, w, h in
-                                            rects]
-                            outputs_value = sess.run(outputs, feed_dict={inputs: inputs_value})
-                            detections = yolov3.to_detections(outputs_value, class_names, confidence_threshold,
-                                                              iou_threshold)
-
-                            # frame detected objects, if any
-                            objects = {}
-
-                            for (x, y, w, h), detection in zip(rects, detections):
+                            # draw rectangles around subframes with movement
+                            for x, y, w, h in rects:
                                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
+                            logger.debug('movement detected at %s' % rects)
 
-                                for name, boxes in detection.items():
-                                    x_scale, y_scale = w / yolov3._MODEL_SIZE[0], h / yolov3._MODEL_SIZE[1]
-                                    if name not in objects:
-                                        objects[name] = []
-                                    for box in boxes:
-                                        x_obj = int(x + box[0] * x_scale)
-                                        y_obj = int(y + box[1] * y_scale)
-                                        w_obj = int(x + box[2] * x_scale) - x_obj
-                                        h_obj = int(y + box[3] * y_scale) - y_obj
-                                        cv2.rectangle(frame, (x_obj, y_obj), (x_obj + w_obj, y_obj + h_obj),
-                                                      class_colors[name], 1)
-                                        cv2.putText(frame, '%s %.1f%%' % (name, box[4] * 100), (x_obj, y_obj),
-                                                    cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, class_colors[name], 1)
-                                        objects[name] += [[x_obj, y_obj, w_obj, h_obj, box[4]]]
-
-                            # detect objects in subframe
+                            # inspect subframes with movement
+                            objects = recognizer(frame, rects)
+                            for name, (x, y, w, h, conf) in objects.items():
+                                cv2.rectangle(frame, (x, y), (x + w, y + h), class_colors[name], 1)
+                                cv2.putText(frame, '%s %.1f%%' % (name, conf * 100), (x, y),
+                                            cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, class_colors[name], 1)
                             if len(set(objects.keys()) - background_names) > 0:
-                                logger.info('[%s] %s' % (
-                                current_time.strftime('%Y%m%d%H%M%S%f'), {n: r for n, r in objects.items()}))
+                                logger.info('[%s] %s' % (current_time.strftime('%Y%m%d%H%M%S%f'),
+                                                         {n: r for n, r in objects.items()}))
                                 screenshot = True
 
                         # text in the left top of the screen
@@ -179,7 +149,6 @@ def start_watch(url, credentials, min_rect_size, class_names, background_names,
             print('Fail establish communication at %s: %s' % (datetime.datetime.now().strftime('%A %d %B %Y %H:%M:%S.%f')[:-3], ex))
             time.sleep(10)
             
-    sess.close()
     logger.info('Stop watching')
 
 
@@ -190,7 +159,7 @@ if __name__ == '__main__':
                        help='URL of the videostream')
     parser.add_argument('-c', '--credentials', nargs=2,
                        help='credential, username and password')
-    parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2, default=yolov3._MODEL_SIZE,
+    parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2, default=yolov3.MODEL_SIZE,
                        help='minimal size of rectangle to be croped from initial frame for object recognition')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
@@ -223,7 +192,7 @@ if __name__ == '__main__':
     with open(args.names_file, 'r') as f:
         class_names = f.read().splitlines()
 
-    # load backgound classes, if filename provided
+    # load background classes, if filename provided
     background_names = set(args.background)
     if args.background_file:
         with open(args.background_file, 'r') as f:

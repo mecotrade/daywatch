@@ -7,7 +7,8 @@ _LEAKY_RELU = 0.1
 _ANCHORS = [(10, 13), (16, 30), (33, 23),
             (30, 61), (62, 45), (59, 119),
             (116, 90), (156, 198), (373, 326)]
-_MODEL_SIZE = (416, 416)
+MODEL_SIZE = (416, 416)
+
 
 def batch_norm(inputs, training, data_format):
     """Performs a batch normalization using a standard set of parameters."""
@@ -52,6 +53,7 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, data_format, strides=1):
         inputs=inputs, filters=filters, kernel_size=kernel_size,
         strides=strides, padding=('SAME' if strides == 1 else 'VALID'),
         use_bias=False, data_format=data_format)
+
 
 def darknet53_residual_block(inputs, filters, training, data_format,
                              strides=1):
@@ -135,6 +137,7 @@ def darknet53(inputs, training, data_format):
 
     return route1, route2, inputs
 
+
 def yolo_convolution_block(inputs, filters, training, data_format):
     """Creates convolution operations layer used after Darknet."""
     inputs = conv2d_fixed_padding(inputs, filters=filters, kernel_size=1,
@@ -170,6 +173,7 @@ def yolo_convolution_block(inputs, filters, training, data_format):
     inputs = tf.nn.leaky_relu(inputs, alpha=_LEAKY_RELU)
 
     return route, inputs
+
 
 def yolo_layer(inputs, n_classes, anchors, img_size, data_format):
     """Creates Yolo final detection layer.
@@ -227,6 +231,7 @@ def yolo_layer(inputs, n_classes, anchors, img_size, data_format):
 
     return inputs
 
+
 def upsample(inputs, out_shape, data_format):
     """Upsamples to `out_shape` using nearest neighbor interpolation."""
     if data_format == 'channels_first':
@@ -244,6 +249,7 @@ def upsample(inputs, out_shape, data_format):
 
     return inputs
 
+
 def build_boxes(inputs):
     """Computes top left and bottom right points of the boxes."""
     center_x, center_y, width, height, confidence, classes = \
@@ -259,6 +265,7 @@ def build_boxes(inputs):
                        confidence, classes], axis=-1)
 
     return boxes
+
 
 def load_weights(variables, file_name):
     """Reshapes and loads official pretrained Yolo weights.
@@ -346,21 +353,16 @@ def load_weights(variables, file_name):
     return assign_ops
 
 
-
-
 class Yolo_v3:
     """Yolo v3 model class."""
 
-    def __init__(self, n_classes, model_size, max_output_size, iou_threshold,
-                 confidence_threshold, data_format=None):
+    def __init__(self, n_classes, model_size, max_output_size, data_format=None):
         """Creates the model.
 
         Args:
             n_classes: Number of class labels.
             model_size: The input size of the model.
             max_output_size: Max number of boxes to be selected for each class.
-            iou_threshold: Threshold for the IOU.
-            confidence_threshold: Threshold for the confidence score.
             data_format: The input format.
 
         Returns:
@@ -375,8 +377,6 @@ class Yolo_v3:
         self.n_classes = n_classes
         self.model_size = model_size
         self.max_output_size = max_output_size
-        self.iou_threshold = iou_threshold
-        self.confidence_threshold = confidence_threshold
         self.data_format = data_format
 
     def __call__(self, inputs, training):
@@ -447,89 +447,3 @@ class Yolo_v3:
             inputs = build_boxes(inputs)
 
             return inputs
-        
-        
-#######################################################################
-# POSTPROCESS
-#######################################################################
-
-# Malisiewicz et al.
-def non_max_suppression_fast(boxes, overlapThresh):
-    # if there are no boxes, return an empty list
-    if len(boxes) == 0:
-        return []
- 
-    # if the bounding boxes integers, convert them to floats --
-    # this is important since we'll be doing a bunch of divisions
-    if boxes.dtype.kind == "i":
-        boxes = boxes.astype("float")
- 
-    # initialize the list of picked indexes    
-    pick = []
- 
-    # grab the coordinates of the bounding boxes
-    x1 = boxes[:,0]
-    y1 = boxes[:,1]
-    x2 = boxes[:,2]
-    y2 = boxes[:,3]
- 
-    # compute the area of the bounding boxes and sort the bounding
-    # boxes by the bottom-right y-coordinate of the bounding box
-    area = (x2 - x1 + 1) * (y2 - y1 + 1)
-    idxs = np.argsort(y2)
- 
-    # keep looping while some indexes still remain in the indexes
-    # list
-    while len(idxs) > 0:
-        # grab the last index in the indexes list and add the
-        # index value to the list of picked indexes
-        last = len(idxs) - 1
-        i = idxs[last]
-        pick.append(i)
- 
-        # find the largest (x, y) coordinates for the start of
-        # the bounding box and the smallest (x, y) coordinates
-        # for the end of the bounding box
-        xx1 = np.maximum(x1[i], x1[idxs[:last]])
-        yy1 = np.maximum(y1[i], y1[idxs[:last]])
-        xx2 = np.minimum(x2[i], x2[idxs[:last]])
-        yy2 = np.minimum(y2[i], y2[idxs[:last]])
- 
-        # compute the width and height of the bounding box
-        w = np.maximum(0, xx2 - xx1 + 1)
-        h = np.maximum(0, yy2 - yy1 + 1)
- 
-        # compute the ratio of overlap
-        overlap = (w * h) / area[idxs[:last]]
- 
-        # delete all indexes from the index list that have
-        idxs = np.delete(idxs, np.concatenate(([last],
-            np.where(overlap > overlapThresh)[0])))
- 
-
-    return pick
-
-def to_detections(outputs, class_names, confidence_threshold, iou_threshold):
-    
-    boxes_dicts = []
-    
-    for boxes in outputs:
-        boxes = boxes[boxes[:, 4] > confidence_threshold]
-        classes = np.argmax(boxes[:,5:], axis=-1)
-        classes = np.expand_dims(classes, axis=-1)
-        boxes = np.concatenate([boxes[:, :5], classes], axis=-1)
-
-        boxes_dict = dict()
-        for cls in range(len(class_names)):
-            mask = np.reshape(boxes[:, 5:] == cls, [-1])
-            if len(mask) != 0:
-                class_boxes = boxes[mask,:]
-                boxes_coords, boxes_conf_scores = class_boxes[:, :4], class_boxes[:, 4:5]
-                boxes_conf_scores = np.reshape(boxes_conf_scores, [-1])
-                indices = non_max_suppression_fast(boxes_coords, iou_threshold)
-                class_boxes = class_boxes[indices]
-                if len(class_boxes) > 0:
-                    boxes_dict[class_names[cls]] = class_boxes[:,:5]
-        boxes_dicts.append(boxes_dict)
-        
-    return boxes_dicts
