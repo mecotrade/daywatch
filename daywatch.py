@@ -4,8 +4,6 @@ import numpy as np
 import base64
 import datetime
 import time
-import os
-import tensorflow as tf
 import logging
 import inspect
 from seaborn import color_palette
@@ -14,6 +12,7 @@ import argparse
 
 from movement_detector import MovementDetector
 from recognition_engine import RecognitionEngine
+from frame_processor import FrameProcessor
 
 
 def get_authorization(credentials):
@@ -21,46 +20,7 @@ def get_authorization(credentials):
     return 'Basic %s' % base64string
 
 
-def save_frame(screenshot_dir, frame_time, frame, prefix=''):
-
-    today_screenshot_dir = os.path.join(screenshot_dir, frame_time.strftime('%Y%m%d'))
-    if not os.path.exists(today_screenshot_dir):
-        os.makedirs(today_screenshot_dir)
-        print('Created screenshot directory %s' % today_screenshot_dir)
-
-    cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))), frame,
-                [cv2.IMWRITE_JPEG_QUALITY, 100])
-
-
-def start_watch(url, credentials, min_rect_size, class_names, background_names,
-                min_contour_area=1000, sensetivity=16, rectangle_separation=5,
-                max_output_size=10, confidence_threshold=0.5, iou_threshold=0.5,
-                weights_file='yolov3.weights', log_file='watch.log', screenshot_dir='screenshots'):
-    
-    # init logger
-    handler = logging.FileHandler(log_file)
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
-
-    logger = logging.getLogger('watch')
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-
-    logger.info('Start watching with following configuration:')
-
-    arguments, _, _, defaults = inspect.getargvalues(inspect.stack()[0][0])
-    for a, v in defaults.items():
-        if a in arguments:
-            # hide password in logs
-            if 'credentials' == a:
-                v = [v[0], '******']
-            logger.info('  - %s: %s' % (a, v))
-
-    colors = np.array(color_palette('hls', 80)) * 255
-    class_colors = {n: colors[i] for i, n in enumerate(class_names)}
-
-    detector = MovementDetector(min_contour_area, min_rect_size, rectangle_separation, sensetivity)
-    recognizer = RecognitionEngine(class_names, max_output_size, iou_threshold, confidence_threshold, weights_file)
+def start_watch(url, credentials):
 
     # start main loop
     loop = True
@@ -76,12 +36,8 @@ def start_watch(url, credentials, min_rect_size, class_names, background_names,
                 print('Communication established at %s' % datetime.datetime.now().strftime('%A %d %B %Y %H:%M:%S.%f')[:-3])
 
                 data = bytearray()
-                last_gray = None
 
-                while True:
-
-                    # current time
-                    current_time = datetime.datetime.now()
+                while loop:
 
                     new_bytes = stream.read(1024)
                     if len(new_bytes) == 0:
@@ -99,48 +55,7 @@ def start_watch(url, credentials, min_rect_size, class_names, background_names,
                         data = data[end_marker+2:]
 
                         frame = cv2.imdecode(np.array(jpg), cv2.IMREAD_COLOR)
-                        screenshot = False
-
-                        rects = detector(frame)
-                        if rects:
-
-                            # draw rectangles around subframes with movement
-                            for x, y, w, h in rects:
-                                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
-                            logger.debug('movement detected at %s' % rects)
-
-                            # inspect subframes with movement
-                            objects = recognizer(frame, rects)
-                            for name, (x, y, w, h, conf) in objects.items():
-                                cv2.rectangle(frame, (x, y), (x + w, y + h), class_colors[name], 1)
-                                cv2.putText(frame, '%s %.1f%%' % (name, conf * 100), (x, y),
-                                            cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, class_colors[name], 1)
-                            if len(set(objects.keys()) - background_names) > 0:
-                                logger.info('[%s] %s' % (current_time.strftime('%Y%m%d%H%M%S%f'),
-                                                         {n: r for n, r in objects.items()}))
-                                screenshot = True
-
-                        # text in the left top of the screen
-                        cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
-
-                        # timestamp in the left bottom of the screen
-                        cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
-                                    (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 1)
-
-                        # show the frame and record if the user presses a key
-                        cv2.imshow('Security Feed', frame)
-                            
-                        key = cv2.waitKey(1) & 0xff
-
-                        # if the 'q' key is pressed, break from the loop
-                        if key == ord('q'):
-                            loop = False
-                            print('Exited')
-                            break
-
-                        # save frame if moving object detected or 's' key is pressed
-                        if screenshot or key == ord('s'):                            
-                            save_frame(screenshot_dir, current_time, frame)
+                        loop = processor(frame)
 
             # close any open windows
             cv2.destroyAllWindows()
@@ -188,27 +103,40 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
+    # init logger
+    handler = logging.FileHandler(args.log_file)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+
+    logger = logging.getLogger('watch')
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    logger.info('Start watching with following configuration:')
+    for a, v in vars(args).items():
+        # hide password in logs
+        if 'credentials' == a:
+            v = [v[0], '******']
+        logger.info('  - %s: %s' % (a, v))
+
     # load COCO class names
     with open(args.names_file, 'r') as f:
         class_names = f.read().splitlines()
+    logger.info('COCO class names: %s' % class_names)
 
     # load background classes, if filename provided
     background_names = set(args.background)
     if args.background_file:
         with open(args.background_file, 'r') as f:
             background_names.update(f.read().splitlines())
+    logger.info('background class names: %s' % background_names)
 
-    start_watch(url=args.url,
-                credentials=args.credentials,
-                min_rect_size=args.min_rect_size,
-                class_names=class_names,
-                background_names=background_names,
-                min_contour_area=args.min_contour_area, 
-                sensetivity=args.sensetivity, 
-                rectangle_separation=args.rectangle_separation,
-                max_output_size=args.max_output_size,
-                confidence_threshold=args.confidence_threshold, 
-                iou_threshold=args.iou_threshold,
-                weights_file=args.weights_file,
-                log_file=args.log_file,
-                screenshot_dir=args.screenshot_dir)
+    # define class colors
+    colors = np.array(color_palette('hls', 80)) * 255
+    class_colors = {n: colors[i] for i, n in enumerate(class_names)}
+
+    detector = MovementDetector(args.min_contour_area, args.min_rect_size, args.rectangle_separation, args.sensetivity)
+    recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold, args.weights_file)
+    processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir)
+
+    start_watch(url=args.url, credentials=args.credentials)
