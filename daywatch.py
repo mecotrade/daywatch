@@ -7,7 +7,6 @@ import logging
 import queue
 import threading
 from seaborn import color_palette
-import yolov3
 import argparse
 
 from movement_detector import MovementDetector
@@ -104,11 +103,12 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--url', 
-                       help='URL of the videostream')
+                        help='URL of the videostream')
     parser.add_argument('-c', '--credentials', nargs=2,
-                       help='credential, username and password')
-    parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2, default=yolov3.MODEL_SIZE,
-                       help='minimal size of rectangle to be croped from initial frame for object recognition')
+                        help='credential, username and password')
+    parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
+                        help='minimal size of rectangle to be croped from initial frame for object recognition, \
+                        if not set, recognition model input size is used')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
     parser.add_argument('-s', '--sensetivity', type=int, default=16,
@@ -120,9 +120,11 @@ if __name__ == '__main__':
     parser.add_argument('-ct', '--confidence-threshold', type=float, default=0.5,
                         help='when confidence is above this threshold object is considered to be classified')
     parser.add_argument('-iout', '--iou-threshold', type=float, default=0.5,
-                        help='among all intersection boxes containing classified object those whose Intersection Over Union (iou) part is greater than this threshold are choosen')
+                        help='among all intersection boxes containing classified object those whose \
+                        Intersection Over Union (iou) part is greater than this threshold are choosen')
     parser.add_argument('-wf', '--weights_file', default='yolov3.weights',
-                        help='file with YOLOv3 weights. Must be downloaded from https://pjreddie.com/media/files/yolov3.weights')
+                        help='file with YOLOv3 weights. \
+                        Must be downloaded from https://pjreddie.com/media/files/yolov3.weights')
     parser.add_argument('-nf', '--names-file', default='coco.names',
                         help='text file with COCO classes names, one name per line')
     parser.add_argument('-lf', '--log-file', default='watch.log',
@@ -132,7 +134,8 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
     parser.add_argument('-bf', '--background-file',
-                        help='text file with background classes, objects of such classes do not trigger screenshot, one line per class, the order is not important')
+                        help='text file with background classes, objects of such classes do not trigger screenshot, \
+                        one line per class, the order is not important')
     parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
     parser.add_argument('-m', '--mjpg', action='store_true', help='connect to MJPG stream source')
     
@@ -170,8 +173,11 @@ if __name__ == '__main__':
     colors = np.array(color_palette('hls', 80)) * 255
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
-    detector = MovementDetector(args.min_contour_area, args.min_rect_size, args.rectangle_separation, args.sensetivity)
     recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold, args.weights_file)
+    min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
+    logger.info('minimal rectangle size is %s' % str(min_rect_size))
+
+    detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.sensetivity)
     processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir)
 
     if args.mjpg:

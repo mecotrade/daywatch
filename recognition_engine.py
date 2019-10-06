@@ -11,9 +11,10 @@ class RecognitionEngine:
         self.class_names = class_names
         self.iou_threshold = iou_threshold
         self.confidence_threshold = confidence_threshold
+        self.model_size = yolov3._MODEL_SIZE
 
-        self.inputs = tf.placeholder(tf.float32, [None, yolov3.MODEL_SIZE[0], yolov3.MODEL_SIZE[0], 3])
-        model = yolov3.Yolo_v3(n_classes=len(self.class_names), model_size=yolov3.MODEL_SIZE, max_output_size=max_output_size)
+        self.inputs = tf.placeholder(tf.float32, [None, self.model_size[0], self.model_size[0], 3])
+        model = yolov3.Yolo_v3(n_classes=len(self.class_names), model_size=self.model_size, max_output_size=max_output_size)
         self.outputs = model(self.inputs, training=False)
 
         model_vars = tf.global_variables(scope='yolo_v3_model')
@@ -28,7 +29,7 @@ class RecognitionEngine:
 
     def __call__(self, frame, rects):
 
-        subframes = [cv2.resize(frame[y:y + h, x:x + w, :], yolov3.MODEL_SIZE) for x, y, w, h in rects]
+        subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size) for x, y, w, h in rects]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
         detections = self.detect(outputs_value, self.class_names)
 
@@ -38,7 +39,7 @@ class RecognitionEngine:
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
 
             for name, boxes in detection.items():
-                x_scale, y_scale = w / yolov3.MODEL_SIZE[0], h / yolov3.MODEL_SIZE[1]
+                x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
                 if name not in objects:
                     objects[name] = []
                 for box in boxes:

@@ -7,7 +7,7 @@ _LEAKY_RELU = 0.1
 _ANCHORS = [(10, 13), (16, 30), (33, 23),
             (30, 61), (62, 45), (59, 119),
             (116, 90), (156, 198), (373, 326)]
-MODEL_SIZE = (416, 416)
+_MODEL_SIZE = (416, 416)
 
 
 def batch_norm(inputs, training, data_format):
