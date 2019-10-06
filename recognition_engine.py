@@ -36,10 +36,8 @@ class RecognitionEngine:
         # reshape detections back to original frame
         objects = {}
         for (x, y, w, h), detection in zip(rects, detections):
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
-
+            x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
             for name, boxes in detection.items():
-                x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
                 if name not in objects:
                     objects[name] = []
                 for box in boxes:
