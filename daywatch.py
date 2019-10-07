@@ -132,6 +132,8 @@ if __name__ == '__main__':
                         help='log file')
     parser.add_argument('-sd', '--screenshot-dir',
                         help='directory where screenshots is stored, if not set, screenshots are not saved')
+    parser.add_argument('-sq', '--screenshot-quality', type=int, default=80,
+                        help='JPEG quality of saved screenshot, must be an integer between 1 and 100')
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
     parser.add_argument('-bf', '--background-file',
@@ -174,12 +176,14 @@ if __name__ == '__main__':
     colors = np.array(color_palette('hls', 80)) * 255
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
-    recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold, args.weights_file)
+    recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold,
+                                   args.weights_file)
     min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
 
     detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
-    processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir)
+    processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir,
+                               args.screenshot_quality)
 
     if args.mjpg:
         watch_mjpg(args.url, args.credentials)

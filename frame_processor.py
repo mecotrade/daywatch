@@ -8,7 +8,7 @@ class FrameProcessor:
 
     WINDOW_LABEL = 'Security Feed'
 
-    def __init__(self, detector, recognizer, logger, class_colors, background_names, screenshot_dir):
+    def __init__(self, detector, recognizer, logger, class_colors, background_names, screenshot_dir, quality):
 
         self.detector = detector
         self.recognizer = recognizer
@@ -16,6 +16,7 @@ class FrameProcessor:
         self.class_colors = class_colors
         self.background_names = background_names
         self.screenshot_dir = screenshot_dir
+        self.quality = max(100, min(1, quality))
 
         self.multiscreen = False
 
@@ -97,5 +98,5 @@ class FrameProcessor:
                 os.makedirs(today_screenshot_dir)
                 self.logger.info('Created screenshot directory %s' % today_screenshot_dir)
 
-            cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))), frame,
-                        [cv2.IMWRITE_JPEG_QUALITY, 100])
+            cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))),
+                        frame, [cv2.IMWRITE_JPEG_QUALITY, self.quality])
