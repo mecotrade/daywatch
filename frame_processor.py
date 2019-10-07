@@ -1,9 +1,12 @@
+import numpy as np
 import datetime
 import cv2
 import os
 
 
 class FrameProcessor:
+
+    WINDOW_LABEL = 'Security Feed'
 
     def __init__(self, detector, recognizer, logger, class_colors, background_names, screenshot_dir):
 
@@ -14,12 +17,23 @@ class FrameProcessor:
         self.background_names = background_names
         self.screenshot_dir = screenshot_dir
 
+        self.multiscreen = False
+
     def __call__(self, frame):
 
         current_time = datetime.datetime.now()
-
         screenshot = False
-        rects = self.detector(frame)
+
+        if self.multiscreen:
+            multiframe = np.zeros(frame.shape, dtype=np.uint8)
+            x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
+            multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
+            rects, frame_delta, frame_binary = self.detector(frame)
+            multiframe[y_mid:, :x_mid, :] = np.stack([cv2.resize(frame_delta, (x_mid, y_mid))] * 3, axis=2)
+            multiframe[y_mid:, x_mid:, :] = np.stack([cv2.resize(frame_binary, (x_mid, y_mid))] * 3, axis=2)
+        else:
+            rects, _, _ = self.detector(frame)
+
         if rects:
 
             # draw rectangles around subframes with movement
@@ -49,14 +63,22 @@ class FrameProcessor:
         cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
                     (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 1)
 
-        # show the frame and record if the user presses a key
-        cv2.imshow('Security Feed', frame)
+        # show the frame
+        if self.multiscreen:
+            multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
+            cv2.imshow(FrameProcessor.WINDOW_LABEL, multiframe)
+        else:
+            cv2.imshow(FrameProcessor.WINDOW_LABEL, frame)
 
         key = cv2.waitKey(1) & 0xff
 
         # if the 'q' key is pressed, break from the loop
         if key == ord('q'):
             return False
+
+        # switch between single screen and multiscreen modes (will take effect next frame)
+        if key == ord('m'):
+            self.multiscreen = not self.multiscreen
 
         # save frame if moving object detected or 's' key is pressed
         if screenshot or key == ord('s'):

@@ -3,12 +3,12 @@ import cv2
 
 class MovementDetector:
 
-    def __init__(self, min_contour_area, min_rect_size, rectangle_separation, sensetivity):
+    def __init__(self, min_contour_area, min_rect_size, rectangle_separation, gray_threshold):
 
         self.min_contour_area = min_contour_area
         self.min_rect_size = min_rect_size
         self.rectangle_separation = rectangle_separation
-        self.sensetivity = sensetivity
+        self.gray_threshold = gray_threshold
 
         self.last_gray = None
 
@@ -81,14 +81,14 @@ class MovementDetector:
 
         # compute the absolute difference between the current frame and previous frame
         frame_delta = cv2.absdiff(self.last_gray, gray)
-        threshold = cv2.threshold(frame_delta, self.sensetivity, 255, cv2.THRESH_BINARY)[1]
+        frame_binary = cv2.threshold(frame_delta, self.gray_threshold, 255, cv2.THRESH_BINARY)[1]
 
         # dilate the thresholded image to fill in holes, then find contours on thresholded image
-        threshold = cv2.dilate(threshold, None, iterations=2)
-        cnts, _ = cv2.findContours(threshold.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        frame_binary = cv2.dilate(frame_binary, None, iterations=2)
+        cnts, _ = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         rects = self.merge_rects(self.produce_rects(cnts, (frame.shape[1], frame.shape[0])))
 
         self.last_gray = gray
 
-        return rects
+        return rects, frame_delta, frame_binary

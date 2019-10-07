@@ -1,4 +1,5 @@
 yolov3.weights
 background.names
 *.log
+*.cmd
 screenshots/

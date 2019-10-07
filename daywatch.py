@@ -111,8 +111,9 @@ if __name__ == '__main__':
                         if not set, recognition model input size is used')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
-    parser.add_argument('-s', '--sensetivity', type=int, default=16,
-                        help='motion sensetivity: less is more sensetive')
+    parser.add_argument('-gt', '--gray-threshold', type=int, default=16,
+                        help='motion detection threshold, if the difference of frames at grayscale is above this \
+                        threshold, motion is detected')
     parser.add_argument('-rs', '--rectangle-separation', type=int, default=5,
                         help='mimimal distance bewteen rectangle edges for rectangles to be separated')
     parser.add_argument('-mos', '--max-output-size', type=int, default=10,
@@ -177,7 +178,7 @@ if __name__ == '__main__':
     min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
 
-    detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.sensetivity)
+    detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
     processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, args.screenshot_dir)
 
     if args.mjpg:
