@@ -35,10 +35,10 @@ class MovementDetector:
         return rects
 
     def intersect(self, a, b):
-        return not ((a[0] + a[2] <= b[0] + self.rectangle_separation) or
-                    (b[0] + b[2] <= a[0] + self.rectangle_separation) or
-                    (a[1] + a[3] <= b[1] + self.rectangle_separation) or
-                    (b[1] + b[3] <= a[1] + self.rectangle_separation))
+        return not ((a[0] + a[2] <= b[0] - self.rectangle_separation) or
+                    (b[0] + b[2] <= a[0] - self.rectangle_separation) or
+                    (a[1] + a[3] <= b[1] - self.rectangle_separation) or
+                    (b[1] + b[3] <= a[1] - self.rectangle_separation))
 
     def add_rect(self, rects, r):
 

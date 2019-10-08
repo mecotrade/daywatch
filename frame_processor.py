@@ -16,7 +16,7 @@ class FrameProcessor:
         self.class_colors = class_colors
         self.background_names = background_names
         self.screenshot_dir = screenshot_dir
-        self.quality = max(100, min(1, quality))
+        self.quality = min(100, max(1, quality))
 
         self.multiscreen = False
 
@@ -30,8 +30,11 @@ class FrameProcessor:
             x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
             multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
             rects, frame_delta, frame_binary = self.detector(frame)
-            multiframe[y_mid:, :x_mid, :] = np.stack([cv2.resize(frame_delta, (x_mid, y_mid))] * 3, axis=2)
-            multiframe[y_mid:, x_mid:, :] = np.stack([cv2.resize(frame_binary, (x_mid, y_mid))] * 3, axis=2)
+            frame_delta_small = cv2.resize(frame_delta, (x_mid, y_mid))
+            frame_binary_small = cv2.resize(frame_binary, (x_mid, y_mid))
+            for channel in range(frame.shape[2]):
+                multiframe[y_mid:, :x_mid, channel] = frame_delta_small
+                multiframe[y_mid:, x_mid:, channel] = frame_binary_small
         else:
             rects, _, _ = self.detector(frame)
 

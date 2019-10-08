@@ -4,6 +4,7 @@ import numpy as np
 import base64
 import time
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import queue
 import threading
 from seaborn import color_palette
@@ -109,7 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
                         help='minimal size of rectangle to be croped from initial frame for object recognition, \
                         if not set, recognition model input size is used')
-    parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
+    parser.add_argument('-mca', '--min-contour-area', type=int, default=250,
                         help='minimal area of the contour with detected motion')
     parser.add_argument('-gt', '--gray-threshold', type=int, default=16,
                         help='motion detection threshold, if the difference of frames at grayscale is above this \
@@ -145,7 +146,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # init logger
-    handler = logging.FileHandler(args.log_file)
+    handler = TimedRotatingFileHandler(args.log_file, when='D', interval=1)
     handler.setLevel(logging.DEBUG if args.debug else logging.INFO)
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 

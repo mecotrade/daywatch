@@ -29,9 +29,11 @@ class RecognitionEngine:
 
     def __call__(self, frame, rects):
 
-        subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size) for x, y, w, h in rects]
+        subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size, interpolation=cv2.INTER_CUBIC)
+                     for x, y, w, h in rects]
+        # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
-        detections = self.detect(outputs_value, self.class_names)
+        detections = self.detect2(outputs_value, self.class_names)
 
         # reshape detections back to original frame
         objects = {}
@@ -114,7 +116,7 @@ class RecognitionEngine:
 
             boxes_dict = dict()
             for cls in range(len(class_names)):
-                mask = np.reshape(boxes[:, 5:] == cls, [-1])
+                mask = np.reshape(boxes[:, 5] == cls, [-1])
                 if len(mask) != 0:
                     class_boxes = boxes[mask, :]
                     boxes_coords = class_boxes[:, :4]
@@ -125,3 +127,21 @@ class RecognitionEngine:
             boxes_dicts.append(boxes_dict)
 
         return boxes_dicts
+
+    def detect2(self, outputs, class_names):
+        boxes_dicts = []
+
+        for boxes in outputs:
+
+            boxes = boxes[boxes[:, 4] > self.confidence_threshold]
+            indices = self.non_max_suppression_fast(boxes[:, :4])
+            boxes = boxes[indices]
+
+            boxes_dict = dict()
+            boxes_classes = [(class_names[cls], box[:5]) for cls, box in zip(np.argmax(boxes[:, 5:], axis=-1), boxes)]
+            [boxes_dict[name].append([box]) if name in list(boxes_dict.keys()) else boxes_dict.update({name: [box]}) for name, box in boxes_classes]
+
+            boxes_dicts.append(boxes_dict)
+
+        return boxes_dicts
+
