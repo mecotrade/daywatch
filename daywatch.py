@@ -9,6 +9,7 @@ import queue
 import threading
 from seaborn import color_palette
 import argparse
+import os
 
 from movement_detector import MovementDetector
 from recognition_engine import RecognitionEngine
@@ -146,7 +147,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # init logger
-    handler = TimedRotatingFileHandler(args.log_file, when='D', interval=1)
+    log_dir = os.path.dirname(args.log_file)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    handler = TimedRotatingFileHandler(args.log_file, when='midnight')
     handler.setLevel(logging.DEBUG if args.debug else logging.INFO)
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 

@@ -31,7 +31,7 @@ class RecognitionEngine:
 
         subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size, interpolation=cv2.INTER_CUBIC)
                      for x, y, w, h in rects]
-        # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes]
+        # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes...]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
         detections = self.detect2(outputs_value, self.class_names)
 
@@ -138,10 +138,9 @@ class RecognitionEngine:
             boxes = boxes[indices]
 
             boxes_dict = dict()
-            boxes_classes = [(class_names[cls], box[:5]) for cls, box in zip(np.argmax(boxes[:, 5:], axis=-1), boxes)]
-            [boxes_dict[name].append([box]) if name in list(boxes_dict.keys()) else boxes_dict.update({name: [box]}) for name, box in boxes_classes]
+            boxes_classes = [(class_names[cls], box[:5].tolist()) for cls, box in zip(np.argmax(boxes[:, 5:], axis=-1), boxes)]
+            [boxes_dict[name].append(box) if name in list(boxes_dict.keys()) else boxes_dict.update({name: [box]}) for name, box in boxes_classes]
 
             boxes_dicts.append(boxes_dict)
 
         return boxes_dicts
-
