@@ -60,8 +60,7 @@ class FrameProcessor:
 
         # text in the left top of the screen
         cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30),
-                    cv2.FONT_HERSHEY_COMPLEX,
-                    1, (0, 0, 255), 2)
+                    cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
 
         # timestamp in the left bottom of the screen
         cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
