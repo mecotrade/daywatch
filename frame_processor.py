@@ -6,15 +6,18 @@ import os
 
 class FrameProcessor:
 
-    WINDOW_LABEL = 'Security Feed'
+    _WINDOW_LABEL = 'Security Feed'
 
-    def __init__(self, detector, recognizer, logger, class_colors, background_names, screenshot_dir, quality):
+    def __init__(self, detector, recognizer, logger, class_colors, background_names, background_boxes,
+                 background_overlap, screenshot_dir, quality):
 
         self.detector = detector
         self.recognizer = recognizer
         self.logger = logger
         self.class_colors = class_colors
         self.background_names = background_names
+        self.background_boxes = background_boxes
+        self.background_overlap = background_overlap
         self.screenshot_dir = screenshot_dir
         self.quality = min(100, max(1, quality))
 
@@ -48,9 +51,25 @@ class FrameProcessor:
             # inspect subframes with movement
             objects = self.recognizer(frame, rects)
             for name, boxes in objects.items():
-                if name not in self.background_names:
-                    screenshot = True
+                background_name = name in self.background_names
+                blind_boxes = self.background_boxes[name] if name in self.background_boxes else None
                 for x, y, w, h, conf in boxes:
+                    background = background_name
+                    if not background and blind_boxes is not None:
+                        for blind_box in blind_boxes:
+                            overlap_area = (max(x, blind_box[0]) - min(x + w, blind_box[0] + blind_box[2])) * \
+                                           (max(y, blind_box[1]) - min(y + h, blind_box[1] + blind_box[3]))
+                            # which part of detected box is contained in blind box
+                            overlap_part = overlap_area / ((w + 1) * (h + 1)) > 0.5
+                            if overlap_part > self.background_overlap:
+                                background = True
+                                self.logger.debug('[%s] background (%.3f) %s: %s' %
+                                                  (current_time.strftime('%Y%m%d%H%M%S%f'),
+                                                   overlap_part, name, [x, y, w, h]))
+                                break
+                    if not background:
+                        screenshot = True
+
                     cv2.rectangle(frame, (x, y), (x + w, y + h), self.class_colors[name], 1)
                     cv2.putText(frame, '%s %.1f%%' % (name, conf * 100), (x, y),
                                 cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, self.class_colors[name], 1)
@@ -69,9 +88,8 @@ class FrameProcessor:
         # show the frame
         if self.multiscreen:
             multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
-            cv2.imshow(FrameProcessor.WINDOW_LABEL, multiframe)
-        else:
-            cv2.imshow(FrameProcessor.WINDOW_LABEL, frame)
+
+        cv2.imshow(FrameProcessor._WINDOW_LABEL, multiframe if self.multiscreen else frame)
 
         key = cv2.waitKey(1) & 0xff
 

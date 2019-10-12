@@ -6,11 +6,19 @@ import yolov3
 
 class RecognitionEngine:
 
-    def __init__(self, class_names, max_output_size, iou_threshold, confidence_threshold, weights_file):
+    def __init__(self, class_names, max_output_size, iou_threshold, confidence_threshold, selector, weights_file):
 
         self.class_names = class_names
         self.iou_threshold = iou_threshold
         self.confidence_threshold = confidence_threshold
+
+        if 'box' == selector:
+            self.selector = lambda clusters, boxes: [cluster[np.argmax(boxes[cluster, 4])] for cluster in clusters]
+        elif 'class' == selector:
+            self.selector = lambda clusters, boxes: [cluster[np.argmax(np.max(boxes[cluster, 5:], axis=-1))]
+                                                     for cluster in clusters]
+        else:
+            raise ValueError('Unknown selector %s' % selector)
 
         model = yolov3.Yolo_v3(n_classes=len(self.class_names), max_output_size=max_output_size)
         self.model_size = model.model_size
@@ -206,6 +214,21 @@ class RecognitionEngine:
         return boxes_dicts
 
     def detect3(self, outputs, class_names):
+        """
+        :param outputs:
+                the raw otuput of the model, list of arrays
+                [x1, y1, x2, y2, conf, class1, class2, ...]
+                where (x1, y1) is upper-right coordinate of the box,
+                (x2, y2) is lower-left coordinate of the box,
+                conf is the confidence of the box, and
+                class1, class2, ... are confidence of the classes
+        :param class_names:
+                list of human readable class names
+        :return:
+                dictionary class_name -> list of [x1, y1, w, h, conf], where
+                (x1, y1) is upper-left box coordinate, w is the box width,
+                h is the box height and conf is the box confidence
+        """
         boxes_dicts = []
 
         for boxes in outputs:
@@ -213,9 +236,7 @@ class RecognitionEngine:
             boxes = boxes[boxes[:, 4] > self.confidence_threshold]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
-                # boxes = np.array([boxes[cluster[np.argmax(boxes[cluster, 4])], :] for cluster in clusters])
-                boxes = np.array([boxes[cluster[np.argmax(np.max(boxes[cluster, 5:], axis=-1))], :]
-                                  for cluster in clusters])
+                boxes = np.array(boxes[self.selector(clusters, boxes), :])
 
                 boxes_dict = dict()
                 boxes_classes = [(class_names[cls], box[:5].tolist()) for cls, box in
