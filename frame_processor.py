@@ -22,6 +22,8 @@ class FrameProcessor:
         self.quality = min(100, max(1, quality))
 
         self.multiscreen = False
+        self.show_background = False
+        self.show_background_class = None
 
     def __call__(self, frame):
 
@@ -85,25 +87,60 @@ class FrameProcessor:
         cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
                     (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 1)
 
-        # show the frame
-        if self.multiscreen:
-            multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
-
-        cv2.imshow(FrameProcessor._WINDOW_LABEL, multiframe if self.multiscreen else frame)
-
         key = cv2.waitKey(1) & 0xff
 
         # if the 'q' key is pressed, break from the loop
         if key == ord('q'):
             return False
 
-        # switch between single screen and multiscreen modes (will take effect next frame)
-        if key == ord('m'):
-            self.multiscreen = not self.multiscreen
-
         # save frame if moving object detected or 's' key is pressed
         if screenshot or key == ord('s'):
             self.save_frame(current_time, frame)
+
+        # switch between show/hide background objects
+        if key == ord('b'):
+            self.show_background = not self.show_background
+
+        if key == ord('c'):
+            if self.show_background:
+                names = list(self.background_boxes.keys())
+                if self.show_background_class is None:
+                    self.show_background_class = names[0]
+                else:
+                    idx = names.index(self.show_background_class)
+                    if idx < 0:
+                        self.logger.debug('background name %s not found in background boxes' % self.show_background_class)
+                        self.show_background_class = None
+                    elif idx < len(names) - 1:
+                        self.show_background_class = names[idx+1]
+                    else:
+                        self.show_background_class = None
+
+        # show background objects
+        if self.show_background:
+            if self.show_background_class in self.background_boxes:
+                cv2.putText(frame, 'Background zone for %s' % self.show_background_class, (10, 60),
+                            cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
+                for box in self.background_boxes[self.show_background_class]:
+                    cv2.rectangle(frame, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]),
+                                  self.class_colors[self.show_background_class], thickness=2)
+            else:
+                cv2.putText(frame, 'Background zone for all classes', (10, 60),
+                            cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
+                for name, boxes in self.background_boxes.items():
+                    for box in boxes:
+                        cv2.rectangle(frame, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]),
+                                      self.class_colors[name], thickness=2)
+
+        # add frame to multiframe
+        if self.multiscreen:
+            multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
+
+        cv2.imshow(FrameProcessor._WINDOW_LABEL, multiframe if self.multiscreen else frame)
+
+        # switch between single screen and multiscreen modes (will take effect next frame)
+        if key == ord('m'):
+            self.multiscreen = not self.multiscreen
 
         return True
 

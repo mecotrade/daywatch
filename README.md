@@ -21,4 +21,6 @@ daywatch.py -h
 When focus on security feed window following hotkeys available:
 * `s` manually save a screenshot
 * `m` switch to multiscreen mode, which might be useful for tune motion detector parameters
+* `b` show/hide background zones (when background objects are defined in json file)
+* `c` in background mode: switch between background zones for specific classes
 * `q` quit
