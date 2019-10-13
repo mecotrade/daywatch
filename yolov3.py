@@ -356,13 +356,13 @@ def load_weights(variables, file_name):
 class Yolo_v3:
     """Yolo v3 model class."""
 
-    def __init__(self, n_classes, model_size, max_output_size, data_format=None):
+    def __init__(self, n_classes, max_output_size, model_size=_MODEL_SIZE, data_format=None):
         """Creates the model.
 
         Args:
             n_classes: Number of class labels.
-            model_size: The input size of the model.
             max_output_size: Max number of boxes to be selected for each class.
+            model_size: The input size of the model.
             data_format: The input format.
 
         Returns:
