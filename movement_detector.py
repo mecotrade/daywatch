@@ -85,7 +85,11 @@ class MovementDetector:
 
         # dilate the thresholded image to fill in holes, then find contours on thresholded image
         frame_binary = cv2.dilate(frame_binary, None, iterations=2)
-        cnts, _ = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # method returns 3 values for version 3.x of OpenCV, and 2 values for version 4.x of OpenCV
+        # in both cases the contours description is in before-last position
+        cnts = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = cnts[-2]
 
         rects = self.merge_rects(self.produce_rects(cnts, (frame.shape[1], frame.shape[0])))
 

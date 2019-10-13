@@ -2,6 +2,7 @@ import numpy as np
 import datetime
 import cv2
 import os
+import sys
 
 
 class FrameProcessor:
@@ -24,6 +25,9 @@ class FrameProcessor:
         self.multiscreen = False
         self.show_background = False
         self.show_background_class = None
+
+        self.logger.info('Python version: %s' % sys.version)
+        self.logger.info('OpenCV version: %s' % cv2.__version__)
 
     def __call__(self, frame):
 
