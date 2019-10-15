@@ -6,9 +6,8 @@ import yolov3
 
 class RecognitionEngine:
 
-    def __init__(self, class_names, max_output_size, iou_threshold, confidence_threshold, selector, weights_file):
+    def __init__(self, n_classes, max_output_size, iou_threshold, confidence_threshold, selector, weights_file):
 
-        self.class_names = class_names
         self.iou_threshold = iou_threshold
         self.confidence_threshold = confidence_threshold
 
@@ -20,7 +19,7 @@ class RecognitionEngine:
         else:
             raise ValueError('Unknown selector %s' % selector)
 
-        model = yolov3.Yolo_v3(n_classes=len(self.class_names), max_output_size=max_output_size)
+        model = yolov3.Yolo_v3(n_classes=n_classes, max_output_size=max_output_size)
         self.model_size = model.model_size
         self.inputs = tf.placeholder(tf.float32, [None, self.model_size[0], self.model_size[1], 3])
         self.outputs = model(self.inputs, training=False)
@@ -41,21 +40,17 @@ class RecognitionEngine:
                      for x, y, w, h in rects]
         # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes...]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
-        detections = self.detect3(outputs_value, self.class_names)
+        detections = self.detect(outputs_value)
 
-        # reshape detections back to original frame
-        objects = {}
-        for (x, y, w, h), detection in zip(rects, detections):
+        objects = []
+        for (x, y, w, h), boxes in zip(rects, detections):
             x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
-            for name, boxes in detection.items():
-                if name not in objects:
-                    objects[name] = []
-                for box in boxes:
-                    x_obj = int(x + box[0] * x_scale)
-                    y_obj = int(y + box[1] * y_scale)
-                    w_obj = int(x + box[2] * x_scale) - x_obj
-                    h_obj = int(y + box[3] * y_scale) - y_obj
-                    objects[name] += [[x_obj, y_obj, w_obj, h_obj, box[4]]]
+            for box in boxes:
+                x_obj = int(x + box[0] * x_scale)
+                y_obj = int(y + box[1] * y_scale)
+                w_obj = int(x + box[2] * x_scale) - x_obj
+                h_obj = int(y + box[3] * y_scale) - y_obj
+                objects += [[x_obj, y_obj, w_obj, h_obj] + box[4:]]
 
         return objects
 
@@ -171,49 +166,7 @@ class RecognitionEngine:
 
         return list(clusters.values())
 
-    def detect(self, outputs, class_names):
-        boxes_dicts = []
-
-        for boxes in outputs:
-            boxes = boxes[boxes[:, 4] > self.confidence_threshold]
-            classes = np.argmax(boxes[:, 5:], axis=-1)
-            classes = np.expand_dims(classes, axis=-1)
-            boxes = np.concatenate([boxes[:, :5], classes], axis=-1)
-
-            boxes_dict = dict()
-            for cls in range(len(class_names)):
-                mask = np.reshape(boxes[:, 5] == cls, [-1])
-                if len(mask) != 0:
-                    class_boxes = boxes[mask, :]
-                    boxes_coords = class_boxes[:, :4]
-                    indices = self.non_max_suppression_fast(boxes_coords)
-                    class_boxes = class_boxes[indices]
-                    if len(class_boxes) > 0:
-                        boxes_dict[class_names[cls]] = class_boxes[:, :5]
-            boxes_dicts.append(boxes_dict)
-
-        return boxes_dicts
-
-    def detect2(self, outputs, class_names):
-        boxes_dicts = []
-
-        for boxes in outputs:
-
-            boxes = boxes[boxes[:, 4] > self.confidence_threshold]
-            indices = self.non_max_suppression_fast(boxes[:, :4])
-            boxes = boxes[indices]
-
-            boxes_dict = dict()
-            boxes_classes = [(class_names[cls], box[:5].tolist()) for cls, box in
-                             zip(np.argmax(boxes[:, 5:], axis=-1), boxes)]
-            [boxes_dict[name].append(box) if name in list(boxes_dict.keys())
-             else boxes_dict.update({name: [box]}) for name, box in boxes_classes]
-
-            boxes_dicts.append(boxes_dict)
-
-        return boxes_dicts
-
-    def detect3(self, outputs, class_names):
+    def detect(self, outputs):
         """
         :param outputs:
                 the raw otuput of the model, list of arrays
@@ -222,28 +175,28 @@ class RecognitionEngine:
                 (x2, y2) is lower-left coordinate of the box,
                 conf is the confidence of the box, and
                 class1, class2, ... are confidence of the classes
-        :param class_names:
-                list of human readable class names
         :return:
-                dictionary class_name -> list of [x1, y1, w, h, conf], where
-                (x1, y1) is upper-left box coordinate, w is the box width,
-                h is the box height and conf is the box confidence
+                list (one item per subframe) of list (one box per object)
+                of [x1, y1, w, h, conf, class1, class2, ...],
+                where (x1, y1) is upper-left box coordinate, w is the box width,
+                h is the box height, conf is the box confidence, and
+                class1, class2, ... are class confidences
         """
         boxes_dicts = []
 
+        detections = []
         for boxes in outputs:
 
             boxes = boxes[boxes[:, 4] > self.confidence_threshold]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
-                boxes = np.array(boxes[self.selector(clusters, boxes), :])
 
-                boxes_dict = dict()
-                boxes_classes = [(class_names[cls], box[:5].tolist()) for cls, box in
-                                 zip(np.argmax(boxes[:, 5:], axis=-1), boxes)]
-                [boxes_dict[name].append(box) if name in list(boxes_dict.keys())
-                 else boxes_dict.update({name: [box]}) for name, box in boxes_classes]
+                mean_class_conf = [np.average(boxes[cluster][:, 5:], weights=boxes[cluster][:, 4], axis=0)
+                                   for cluster in clusters]
+                boxes = boxes[self.selector(clusters, boxes), :]
+                boxes[:, 5:] = mean_class_conf
 
-                boxes_dicts.append(boxes_dict)
+                detections += [boxes.tolist()]
 
-        return boxes_dicts
+        return detections
+

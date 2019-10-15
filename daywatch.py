@@ -7,7 +7,6 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import queue
 import threading
-from seaborn import color_palette
 import argparse
 import os
 import json
@@ -151,6 +150,8 @@ if __name__ == '__main__':
                         help='if area of overlap box of detected object and background object is greater that this \
                         value, the object is considered as background. Applied only if --background-file is \
                          a json file with background object boxes')
+    parser.add_argument('-mcc', '--min_class_conf', default=0.05,
+                        help='minimal class confidence for object to be detected')
     parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
     parser.add_argument('-m', '--mjpg', action='store_true', help='connect to MJPG stream source')
     
@@ -201,17 +202,18 @@ if __name__ == '__main__':
     logger.info('background blind boxes: %s' % background_boxes)
 
     # define class colors
-    colors = np.array(color_palette('hls', 80)) * 255
+    colors = [(255, 0, 0)] * len(class_names)
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
-    recognizer = RecognitionEngine(class_names, args.max_output_size, args.iou_threshold, args.confidence_threshold,
-                                   args.selector, args.weights_file)
+    recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
+                                   args.confidence_threshold, args.selector, args.weights_file)
     min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
 
     detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
-    processor = FrameProcessor(detector, recognizer, logger, class_colors, background_names, background_boxes,
-                               args.background_overlap, args.screenshot_dir, args.screenshot_quality)
+    processor = FrameProcessor(detector, recognizer, logger, class_colors, class_names, background_names,
+                               background_boxes, args.min_class_conf, args.background_overlap, args.screenshot_dir,
+                               args.screenshot_quality)
 
     if args.mjpg:
         watch_mjpg(args.url, args.credentials)
