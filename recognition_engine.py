@@ -116,7 +116,7 @@ class RecognitionEngine:
     def detect(self, outputs):
         """
         :param outputs:
-                the raw otuput of the model, list of arrays
+                the raw output of the model, list of arrays
                 [x1, y1, x2, y2, conf, class1, class2, ...]
                 where (x1, y1) is upper-right coordinate of the box,
                 (x2, y2) is lower-left coordinate of the box,

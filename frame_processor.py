@@ -73,7 +73,7 @@ class FrameProcessor:
                             if overlap_part > self.background_overlap:
                                 background = True
                                 self.logger.debug('[%s] background (%.3f) %s: %s' %
-                                                  (current_time.strftime('%Y%m%d%H%M%S%f'),
+                                                  (FrameProcessor.get_filename(current_time),
                                                    overlap_part, name, box[:4]))
                                 break
                     if not background:
