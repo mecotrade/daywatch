@@ -109,13 +109,13 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--credentials', nargs=2,
                         help='credential, username and password')
     parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
-                        help='minimal size of rectangle to be croped from initial frame for object recognition, \
-                        if not set, recognition model input size is used')
+                        help='minimal size of rectangle to be croped from initial frame for object recognition, '
+                             'if not set, recognition model input size is used')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=250,
                         help='minimal area of the contour with detected motion')
     parser.add_argument('-gt', '--gray-threshold', type=int, default=16,
-                        help='motion detection threshold, if the difference of frames at grayscale is above this \
-                        threshold, motion is detected')
+                        help='motion detection threshold, if the difference of frames at grayscale is above this '
+                             'threshold, motion is detected')
     parser.add_argument('-rs', '--rectangle-separation', type=int, default=5,
                         help='mimimal distance bewteen rectangle edges for rectangles to be separated')
     parser.add_argument('-mos', '--max-output-size', type=int, default=10,
@@ -123,11 +123,11 @@ if __name__ == '__main__':
     parser.add_argument('-ct', '--confidence-threshold', type=float, default=0.5,
                         help='when confidence is above this threshold object is considered to be classified')
     parser.add_argument('-iout', '--iou-threshold', type=float, default=0.5,
-                        help='among all intersection boxes containing classified object those whose \
-                        Intersection Over Union (iou) part is greater than this threshold are choosen')
+                        help='among all intersection boxes containing classified object those whose '
+                             'Intersection Over Union (iou) part is greater than this threshold are choosen')
     parser.add_argument('-s', '--selector', default='box', choices=('box', 'class'),
-                        help='Select one box out of the cluster based either on the box confidence (for "box" value) \
-                        or on class confidence (for "class" value)')
+                        help='Select one box out of the cluster based either on the box confidence (for "box" value) '
+                             'or on class confidence (for "class" value)')
     parser.add_argument('-wf', '--weights_file', default='yolov3.weights',
                         help='file with YOLOv3 weights. \
                         Must be downloaded from https://pjreddie.com/media/files/yolov3.weights')
@@ -139,17 +139,22 @@ if __name__ == '__main__':
                         help='directory where screenshots is stored, if not set, screenshots are not saved')
     parser.add_argument('-sq', '--screenshot-quality', type=int, default=80,
                         help='JPEG quality of saved screenshot, must be an integer between 1 and 100')
+    parser.add_argument('-rsd', '--raw-screenshot-dir',
+                        help='when it is required to collect own dataset based on existed model predictions, '
+                             'which is useful when boxes quaity is acceptable, whereas class detection quality '
+                             'is not, the directory where raw images (with highest quality) together with '
+                             'descriptions, one json file per image, can be set here')
     parser.add_argument('-b', '--background', default=[], nargs='*',
                         help='names of background classes, objects of such classes do not trigger screenshot')
     parser.add_argument('-bf', '--background-file',
-                        help='text file or json file with background classes, objects of such classes do not trigger \
-                        screenshot, if text file, one line per class, the order is not important, if json file, \
-                        object like {"preson": [[x1, y1, w1, h1], [x2, y2, w2, h2]], "car": null}, if value for \
-                        a class name is null, all object of such class are considered as background')
+                        help='text file or json file with background classes, objects of such classes do not trigger '
+                             'screenshot, if text file, one line per class, the order is not important, if json file, '
+                             'object like {"preson": [[x1, y1, w1, h1], [x2, y2, w2, h2]], "car": null}, if value for '
+                             'a class name is null, all object of such class are considered as background')
     parser.add_argument('-bo', '--background-overlap', default=0.5,
-                        help='if area of overlap box of detected object and background object is greater that this \
-                        value, the object is considered as background. Applied only if --background-file is \
-                         a json file with background object boxes')
+                        help='if area of overlap box of detected object and background object is greater that this '
+                             'value, the object is considered as background. Applied only if --background-file is '
+                             'a json file with background object boxes')
     parser.add_argument('-mcc', '--min_class_conf', default=0.05,
                         help='minimal class confidence for object to be detected')
     parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
@@ -212,8 +217,8 @@ if __name__ == '__main__':
 
     detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
     processor = FrameProcessor(detector, recognizer, logger, class_colors, class_names, background_names,
-                               background_boxes, args.min_class_conf, args.background_overlap, args.screenshot_dir,
-                               args.screenshot_quality)
+                               background_boxes, args.min_class_conf, args.background_overlap,
+                               args.screenshot_dir, args.screenshot_quality, args.raw_screenshot_dir)
 
     if args.mjpg:
         watch_mjpg(args.url, args.credentials)

@@ -3,6 +3,7 @@ import datetime
 import cv2
 import os
 import sys
+import json
 
 
 class FrameProcessor:
@@ -10,7 +11,7 @@ class FrameProcessor:
     _WINDOW_LABEL = 'Security Feed'
 
     def __init__(self, detector, recognizer, logger, class_colors, class_names, background_names, background_boxes,
-                 min_class_conf, background_overlap, screenshot_dir, quality):
+                 min_class_conf, background_overlap, screenshot_dir, quality, raw_screenshot_dir):
 
         self.detector = detector
         self.recognizer = recognizer
@@ -23,6 +24,7 @@ class FrameProcessor:
         self.background_overlap = background_overlap
         self.screenshot_dir = screenshot_dir
         self.quality = min(100, max(1, quality))
+        self.raw_screenshot_dir = raw_screenshot_dir
 
         self.multiscreen = False
         self.show_background = False
@@ -51,11 +53,6 @@ class FrameProcessor:
 
         if rects:
 
-            # draw rectangles around subframes with movement
-            for x, y, w, h in rects:
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
-            self.logger.debug('movement detected at %s' % rects)
-
             # inspect subframes with movement
             boxes = self.recognizer(frame, rects)
             description = []
@@ -79,10 +76,21 @@ class FrameProcessor:
                                                   (current_time.strftime('%Y%m%d%H%M%S%f'),
                                                    overlap_part, name, box[:4]))
                                 break
-                    # check if max confidence is above the threshold
                     if not background:
                         screenshot = True
 
+                    description += [(top_classes, box[:5])]
+
+            if screenshot:
+
+                description_ext = {'movements': rects,
+                                   'objects': [(dict(top_classes), box) for top_classes, box in description]}
+
+                if self.raw_screenshot_dir:
+                    self.save_raw_frame_with_description(current_time, frame, description_ext)
+
+                for top_classes, box in description:
+                    name = top_classes[0][0]
                     cv2.rectangle(frame, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]),
                                   self.class_colors[name], 1)
                     cv2.putText(frame, '%.1f%%' % (box[4] * 100,), (box[0] + box[2] // 2 - 20, box[1]),
@@ -94,10 +102,13 @@ class FrameProcessor:
                                     (box[0] + box[2] + 5, box[1] + 20 * (i + 1)),
                                     cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,
                                     self.class_colors[n], 1)
-                    description += [(dict(top_classes), box[:5])]
 
-            if screenshot:
-                self.logger.info('[%s] %s' % (current_time.strftime('%Y%m%d%H%M%S%f'), description))
+                self.logger.info('[%s] %s' % (FrameProcessor.get_filename(current_time), description_ext))
+
+            # draw rectangles around subframes with movement
+            for x, y, w, h in rects:
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
+            self.logger.debug('movement detected at %s' % rects)
 
         # text in the left top of the screen
         cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30),
@@ -114,7 +125,7 @@ class FrameProcessor:
             return False
 
         # save frame if moving object detected or 's' key is pressed
-        if screenshot or key == ord('s'):
+        if (screenshot or key == ord('s')) and self.screenshot_dir:
             self.save_frame(current_time, frame)
 
         # switch between show/hide background objects
@@ -167,13 +178,31 @@ class FrameProcessor:
     def __del__(self):
         cv2.destroyAllWindows()
 
-    def save_frame(self, frame_time, frame, prefix=''):
+    @staticmethod
+    def get_filename(time):
+        return time.strftime('%Y%m%d%H%M%S%f')
 
-        if self.screenshot_dir:
-            today_screenshot_dir = os.path.join(self.screenshot_dir, frame_time.strftime('%Y%m%d'))
-            if not os.path.exists(today_screenshot_dir):
-                os.makedirs(today_screenshot_dir)
-                self.logger.info('Created screenshot directory %s' % today_screenshot_dir)
+    def save_frame(self, frame_time, frame):
 
-            cv2.imwrite(os.path.join(today_screenshot_dir, '%s%s.jpg' % (prefix, frame_time.strftime('%Y%m%d%H%M%S%f'))),
-                        frame, [cv2.IMWRITE_JPEG_QUALITY, self.quality])
+        today_screenshot_dir = os.path.join(self.screenshot_dir, frame_time.strftime('%Y%m%d'))
+        if not os.path.exists(today_screenshot_dir):
+            os.makedirs(today_screenshot_dir)
+            self.logger.info('Created screenshot directory %s' % today_screenshot_dir)
+
+        cv2.imwrite(os.path.join(today_screenshot_dir, '%s.jpg' % FrameProcessor.get_filename(frame_time)),
+                    frame, [cv2.IMWRITE_JPEG_QUALITY, self.quality])
+
+    def save_raw_frame_with_description(self, frame_time, frame, description):
+
+        today_raw_screenshot_dir = os.path.join(self.raw_screenshot_dir, frame_time.strftime('%Y%m%d'))
+        if not os.path.exists(today_raw_screenshot_dir):
+            os.makedirs(today_raw_screenshot_dir)
+            self.logger.info('Created raw screenshot directory %s' % today_raw_screenshot_dir)
+
+        filename = FrameProcessor.get_filename(frame_time)
+
+        cv2.imwrite(os.path.join(today_raw_screenshot_dir, '%s.jpg' % filename),
+                    frame, [cv2.IMWRITE_JPEG_QUALITY, 100])
+
+        with open(os.path.join(today_raw_screenshot_dir, '%s.json' % filename), 'w') as jsonfile:
+            json.dump(description, jsonfile)
