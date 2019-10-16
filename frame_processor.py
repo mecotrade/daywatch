@@ -200,9 +200,11 @@ class FrameProcessor:
             self.logger.info('Created raw screenshot directory %s' % today_raw_screenshot_dir)
 
         filename = FrameProcessor.get_filename(frame_time)
+        filename_jpeg = '%s.jpg' % filename
+        filename_json = '%s.json' % filename
 
-        cv2.imwrite(os.path.join(today_raw_screenshot_dir, '%s.jpg' % filename),
+        cv2.imwrite(os.path.join(today_raw_screenshot_dir, filename_jpeg),
                     frame, [cv2.IMWRITE_JPEG_QUALITY, 100])
 
-        with open(os.path.join(today_raw_screenshot_dir, '%s.json' % filename), 'w') as jsonfile:
-            json.dump(description, jsonfile)
+        with open(os.path.join(today_raw_screenshot_dir, filename_json), 'w') as jsonfile:
+            json.dump(dict(description, file=filename_jpeg), jsonfile)
