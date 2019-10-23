@@ -10,9 +10,11 @@ import threading
 import argparse
 import os
 import json
+from urllib.parse import urlparse
 
 from movement_detector import MovementDetector
 from recognition_engine import RecognitionEngine
+from onvif_connector import ONVIFConnector
 from frame_processor import FrameProcessor
 
 
@@ -105,7 +107,8 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--url',
-                        help='URL of the videostream')
+                        help='URL of the videostream, it might contain placeholders for credentials, '
+                             '{user} and {passwd}, if so, they will be filled with provided credentials')
     parser.add_argument('-c', '--credentials', nargs=2,
                         help='credential, username and password')
     parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
@@ -159,6 +162,12 @@ if __name__ == '__main__':
                         help='minimal class confidence for object to be detected')
     parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
     parser.add_argument('-m', '--mjpg', action='store_true', help='connect to MJPG stream source')
+    parser.add_argument('-mss', '--max-screen-size', type=int,
+                        help='maximal size of screen, if not set, original frame size is used')
+    parser.add_argument('-op', '--onvif-port', default=8899,
+                        help='ONVIF connection port, if not set, default value 8899 is used')
+    parser.add_argument('-oc', '--onvif-credentials', nargs=2,
+                        help='ONVIF connection credentials, if not set, no communication is established')
     
     args = parser.parse_args()
 
@@ -171,14 +180,18 @@ if __name__ == '__main__':
     handler.setLevel(logging.DEBUG if args.debug else logging.INFO)
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 
+    root_logger = logging.getLogger()
+    root_logger.handlers = []
+
     logger = logging.getLogger('watch')
     logger.setLevel(logging.DEBUG)
+    logger.handlers = []
     logger.addHandler(handler)
 
     logger.info('Start watching with following configuration:')
     for a, v in vars(args).items():
         # hide password in logs
-        if 'credentials' == a and v:
+        if ('credentials' == a or 'onvif_credentials' == a) and v:
             v = [v[0], '******']
         logger.info('  - %s: %s' % (a, v))
 
@@ -216,13 +229,27 @@ if __name__ == '__main__':
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
 
     detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
-    processor = FrameProcessor(detector, recognizer, logger, class_colors, class_names, background_names,
-                               background_boxes, args.min_class_conf, args.background_overlap,
-                               args.screenshot_dir, args.screenshot_quality, args.raw_screenshot_dir)
+
+    if args.onvif_credentials is not None:
+        onvif_connector = ONVIFConnector(urlparse(args.url).hostname, args.onvif_port,
+                                         args.onvif_credentials[0], args.onvif_credentials[1], logger)
+    else:
+        onvif_connector = None
+
+    processor = FrameProcessor(detector, recognizer, onvif_connector, logger, class_colors, class_names,
+                               background_names, background_boxes, args.min_class_conf, args.background_overlap,
+                               args.screenshot_dir, args.screenshot_quality, args.raw_screenshot_dir,
+                               args.max_screen_size)
+
+    # insert credentials into URL if required
+    url = args.url.format(user=args.credentials[0],
+                          passwd=args.credentials[1]) if args.credentials is not None else args.url
+
+    print(url)
 
     if args.mjpg:
-        watch_mjpg(args.url, args.credentials)
+        watch_mjpg(url, args.credentials)
     else:
-        watch(args.url)
+        watch(url)
 
     logger.info('Stop watching')

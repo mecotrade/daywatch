@@ -10,11 +10,13 @@ class FrameProcessor:
 
     _WINDOW_LABEL = 'Security Feed'
 
-    def __init__(self, detector, recognizer, logger, class_colors, class_names, background_names, background_boxes,
-                 min_class_conf, background_overlap, screenshot_dir, quality, raw_screenshot_dir):
+    def __init__(self, detector, recognizer, onvif_connector, logger, class_colors, class_names,
+                 background_names, background_boxes, min_class_conf, background_overlap,
+                 screenshot_dir, quality, raw_screenshot_dir, max_screen_size):
 
         self.detector = detector
         self.recognizer = recognizer
+        self.onvif_connector = onvif_connector
         self.logger = logger
         self.class_colors = class_colors
         self.class_names = class_names
@@ -25,6 +27,7 @@ class FrameProcessor:
         self.screenshot_dir = screenshot_dir
         self.quality = min(100, max(1, quality))
         self.raw_screenshot_dir = raw_screenshot_dir
+        self.max_screen_size = max_screen_size
 
         self.multiscreen = False
         self.show_background = False
@@ -167,11 +170,26 @@ class FrameProcessor:
         if self.multiscreen:
             multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
 
-        cv2.imshow(FrameProcessor._WINDOW_LABEL, multiframe if self.multiscreen else frame)
+        screen = multiframe if self.multiscreen else frame
+        if self.max_screen_size is not None and screen.shape[1] > self.max_screen_size:
+            screen = cv2.resize(screen, (self.max_screen_size * screen.shape[1] // screen.shape[0],
+                                         self.max_screen_size))
+
+        cv2.imshow(FrameProcessor._WINDOW_LABEL, screen)
 
         # switch between single screen and multiscreen modes (will take effect next frame)
         if key == ord('m'):
             self.multiscreen = not self.multiscreen
+
+        if self.onvif_connector is not None:
+            if key == ord('d'):
+                self.onvif_connector.move_right()
+            if key == ord('a'):
+                self.onvif_connector.move_left()
+            if key == ord('w'):
+                self.onvif_connector.move_up()
+            if key == ord('s'):
+                self.onvif_connector.move_down()
 
         return True
 
