@@ -138,17 +138,18 @@ class FrameProcessor:
         if key == ord('c'):
             if self.show_background:
                 names = list(self.background_boxes.keys())
-                if self.show_background_class is None:
-                    self.show_background_class = names[0]
-                else:
-                    idx = names.index(self.show_background_class)
-                    if idx < 0:
-                        self.logger.debug('background name %s not found in background boxes' % self.show_background_class)
-                        self.show_background_class = None
-                    elif idx < len(names) - 1:
-                        self.show_background_class = names[idx+1]
+                if names:
+                    if self.show_background_class is None:
+                        self.show_background_class = names[0]
                     else:
-                        self.show_background_class = None
+                        idx = names.index(self.show_background_class)
+                        if idx < 0:
+                            self.logger.debug('background name %s not found in background boxes' % self.show_background_class)
+                            self.show_background_class = None
+                        elif idx < len(names) - 1:
+                            self.show_background_class = names[idx+1]
+                        else:
+                            self.show_background_class = None
 
         # show background objects
         if self.show_background:
