@@ -205,7 +205,6 @@ if __name__ == '__main__':
     background_boxes = {}
     if args.background_file:
         _, ext = os.path.splitext(args.background_file)
-        print(ext)
         if '.json' == ext:
             with open(args.background_file) as json_file:
                 background = json.load(json_file)
