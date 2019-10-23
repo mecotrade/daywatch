@@ -245,8 +245,6 @@ if __name__ == '__main__':
     url = args.url.format(user=args.credentials[0],
                           passwd=args.credentials[1]) if args.credentials is not None else args.url
 
-    print(url)
-
     if args.mjpg:
         watch_mjpg(url, args.credentials)
     else:
