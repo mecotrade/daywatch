@@ -19,7 +19,7 @@ Use key `-h` to read about all available options
 daywatch.py -h
 ```
 When focus on security feed window following hotkeys available:
-* `s` manually save a screenshot
+* `<space>` manually save a screenshot
 * `m` switch to multiscreen mode, which might be useful for tune motion detector parameters
 * `b` show/hide background zones (when background objects are defined in json file)
 * `c` in background mode: switch between background zones for specific classes
@@ -27,7 +27,7 @@ When focus on security feed window following hotkeys available:
 
 If camera provides ONVIF endpoint and ONVIF credentials are provided  ( `-oc` or `--onvif-credentials` key), 
 the following remote control hotkeys are available:
-* `w` move UP
-* `a` move LEFT
-* `d` move RIGHT
-* `s` move DOWN  
+* `<arrow up>` move UP
+* `<arrow left>` move LEFT
+* `<arrow right>` move RIGHT
+* `<arrow down>` move DOWN  

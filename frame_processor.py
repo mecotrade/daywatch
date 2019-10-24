@@ -10,6 +10,11 @@ class FrameProcessor:
 
     _WINDOW_LABEL = 'Security Feed'
 
+    _ARROW_UP_KEY = 2490368
+    _ARROW_DOWN_KEY = 2621440
+    _ARROW_LEFT_KEY = 2424832
+    _ARROW_RIGHT_KEY = 2555904
+
     def __init__(self, detector, recognizer, onvif_connector, logger, class_colors, class_names,
                  background_names, background_boxes, min_class_conf, background_overlap,
                  screenshot_dir, quality, raw_screenshot_dir, max_screen_size):
@@ -121,14 +126,14 @@ class FrameProcessor:
         cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
                     (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 1)
 
-        key = cv2.waitKey(1) & 0xff
+        key = cv2.waitKeyEx(1)
 
         # if the 'q' key is pressed, break from the loop
         if key == ord('q'):
             return False
 
         # save frame if moving object detected or 's' key is pressed
-        if (screenshot or key == ord('s')) and self.screenshot_dir:
+        if (screenshot or key == ord(' ')) and self.screenshot_dir:
             self.save_frame(current_time, frame)
 
         # switch between show/hide background objects
@@ -183,13 +188,13 @@ class FrameProcessor:
             self.multiscreen = not self.multiscreen
 
         if self.onvif_connector is not None:
-            if key == ord('d'):
+            if key == FrameProcessor._ARROW_RIGHT_KEY:
                 self.onvif_connector.move_right()
-            if key == ord('a'):
+            if key == FrameProcessor._ARROW_LEFT_KEY:
                 self.onvif_connector.move_left()
-            if key == ord('w'):
+            if key == FrameProcessor._ARROW_UP_KEY:
                 self.onvif_connector.move_up()
-            if key == ord('s'):
+            if key == FrameProcessor._ARROW_DOWN_KEY:
                 self.onvif_connector.move_down()
 
         return True
