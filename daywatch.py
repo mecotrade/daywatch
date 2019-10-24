@@ -168,6 +168,8 @@ if __name__ == '__main__':
                         help='ONVIF connection port, if not set, default value 8899 is used')
     parser.add_argument('-oc', '--onvif-credentials', nargs=2,
                         help='ONVIF connection credentials, if not set, no communication is established')
+    parser.add_argument('-nd', '--no-detection', action='store_true', help='no movement detection')
+    parser.add_argument('-nr', '--no-recognition', action='store_true', help='no object recognition')
     
     args = parser.parse_args()
 
@@ -221,12 +223,21 @@ if __name__ == '__main__':
     colors = [(255, 0, 0)] * len(class_names)
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
-    recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
-                                   args.confidence_threshold, args.selector, args.weights_file)
-    min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
+    if args.no_recognition:
+        recognizer = None
+        min_rect_size = args.min_rect_size
+    else:
+        recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
+                                       args.confidence_threshold, args.selector, args.weights_file)
+        min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
+
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
 
-    detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation, args.gray_threshold)
+    if args.no_detection:
+        detector = None
+    else:
+        detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation,
+                                    args.gray_threshold)
 
     if args.onvif_credentials is not None:
         onvif_connector = ONVIFConnector(urlparse(args.url).hostname, args.onvif_port,

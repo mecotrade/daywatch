@@ -23,12 +23,13 @@ class MovementDetector:
                 # adjust bounding box of the contour to be at least as large as minimum size
                 # detecting model input size is a good first guess for the minimum size
                 x, y, w, h = cv2.boundingRect(contour)
-                if w < self.min_rect_size[0]:
-                    x = min(max(0, x - (self.min_rect_size[0] - w) // 2), frame_size[0] - self.min_rect_size[0])
-                    w = self.min_rect_size[0]
-                if h < self.min_rect_size[1]:
-                    y = min(max(0, y - (self.min_rect_size[1] - h) // 2), frame_size[1] - self.min_rect_size[1])
-                    h = self.min_rect_size[1]
+                if self.min_rect_size is not None:
+                    if w < self.min_rect_size[0]:
+                        x = min(max(0, x - (self.min_rect_size[0] - w) // 2), frame_size[0] - self.min_rect_size[0])
+                        w = self.min_rect_size[0]
+                    if h < self.min_rect_size[1]:
+                        y = min(max(0, y - (self.min_rect_size[1] - h) // 2), frame_size[1] - self.min_rect_size[1])
+                        h = self.min_rect_size[1]
 
                 rects += [[x, y, w, h]]
 

@@ -46,81 +46,86 @@ class FrameProcessor:
         current_time = datetime.datetime.now()
         screenshot = False
 
-        if self.multiscreen:
-            multiframe = np.zeros(frame.shape, dtype=np.uint8)
-            x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
-            multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
-            rects, frame_delta, frame_binary = self.detector(frame)
-            frame_delta_small = cv2.resize(frame_delta, (x_mid, y_mid))
-            frame_binary_small = cv2.resize(frame_binary, (x_mid, y_mid))
-            for channel in range(frame.shape[2]):
-                multiframe[y_mid:, :x_mid, channel] = frame_delta_small
-                multiframe[y_mid:, x_mid:, channel] = frame_binary_small
+        if self.detector is not None:
+            if self.multiscreen:
+                multiframe = np.zeros(frame.shape, dtype=np.uint8)
+                x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
+                multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
+                rects, frame_delta, frame_binary = self.detector(frame)
+                frame_delta_small = cv2.resize(frame_delta, (x_mid, y_mid))
+                frame_binary_small = cv2.resize(frame_binary, (x_mid, y_mid))
+                for channel in range(frame.shape[2]):
+                    multiframe[y_mid:, :x_mid, channel] = frame_delta_small
+                    multiframe[y_mid:, x_mid:, channel] = frame_binary_small
+            else:
+                rects, _, _ = self.detector(frame)
         else:
-            rects, _, _ = self.detector(frame)
+            # if no movement detector provided, the whole frame is a single input for recognizer
+            rects = [[0, 0, frame.shape[1], frame.shape[0]]]
 
-        if rects:
+        # inspect subframes with movement
+        if self.recognizer is not None:
+            if rects:
+                boxes = self.recognizer(frame, rects)
+                description = []
+                for box in boxes:
+                    top_classes = [(self.class_names[c], box[5 + c]) for c in np.argsort(box[5:])[::-1]
+                                   if box[5 + c] > self.min_class_conf]
+                    if len(top_classes) > 0:
+                        name = top_classes[0][0]
+                        background = name in self.background_names
+                        blind_boxes = self.background_boxes[name] if name in self.background_boxes else None
+                        if not background and blind_boxes is not None:
+                            for blind_box in blind_boxes:
+                                overlap_area = (max(box[0], blind_box[0]) -
+                                                min(box[0] + box[2], blind_box[0] + blind_box[2])) * \
+                                               (max(box[1], blind_box[1]) - min(box[1] + box[3], blind_box[1] + blind_box[3]))
+                                # which part of detected box is contained in blind box
+                                overlap_part = overlap_area / ((box[2] + 1) * (box[3] + 1))
+                                if overlap_part > self.background_overlap:
+                                    background = True
+                                    self.logger.debug('[%s] background (%.3f) %s: %s' %
+                                                      (FrameProcessor.get_filename(current_time),
+                                                       overlap_part, name, box[:4]))
+                                    break
+                        if not background:
+                            screenshot = True
 
-            # inspect subframes with movement
-            boxes = self.recognizer(frame, rects)
-            description = []
-            for box in boxes:
-                top_classes = [(self.class_names[c], box[5 + c]) for c in np.argsort(box[5:])[::-1]
-                               if box[5 + c] > self.min_class_conf]
-                if len(top_classes) > 0:
-                    name = top_classes[0][0]
-                    background = name in self.background_names
-                    blind_boxes = self.background_boxes[name] if name in self.background_boxes else None
-                    if not background and blind_boxes is not None:
-                        for blind_box in blind_boxes:
-                            overlap_area = (max(box[0], blind_box[0]) -
-                                            min(box[0] + box[2], blind_box[0] + blind_box[2])) * \
-                                           (max(box[1], blind_box[1]) - min(box[1] + box[3], blind_box[1] + blind_box[3]))
-                            # which part of detected box is contained in blind box
-                            overlap_part = overlap_area / ((box[2] + 1) * (box[3] + 1))
-                            if overlap_part > self.background_overlap:
-                                background = True
-                                self.logger.debug('[%s] background (%.3f) %s: %s' %
-                                                  (FrameProcessor.get_filename(current_time),
-                                                   overlap_part, name, box[:4]))
-                                break
-                    if not background:
-                        screenshot = True
+                        description += [(top_classes, box[:5])]
 
-                    description += [(top_classes, box[:5])]
+                if screenshot:
 
-            if screenshot:
+                    description_ext = {'movements': rects,
+                                       'objects': [(dict(top_classes), box) for top_classes, box in description]}
 
-                description_ext = {'movements': rects,
-                                   'objects': [(dict(top_classes), box) for top_classes, box in description]}
+                    if self.raw_screenshot_dir:
+                        self.save_raw_frame_with_description(current_time, frame, description_ext)
 
-                if self.raw_screenshot_dir:
-                    self.save_raw_frame_with_description(current_time, frame, description_ext)
-
-                for top_classes, box in description:
-                    name = top_classes[0][0]
-                    cv2.rectangle(frame, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]),
-                                  self.class_colors[name], 1)
-                    cv2.putText(frame, '%.1f%%' % (box[4] * 100,), (box[0] + box[2] // 2 - 20, box[1]),
-                                cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,
-                                self.class_colors[name], 1)
-
-                    for i, (n, c) in enumerate(top_classes):
-                        cv2.putText(frame, '%s: %.1f%%' % (n, c * 100),
-                                    (box[0] + box[2] + 5, box[1] + 20 * (i + 1)),
+                    for top_classes, box in description:
+                        name = top_classes[0][0]
+                        cv2.rectangle(frame, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]),
+                                      self.class_colors[name], 1)
+                        cv2.putText(frame, '%.1f%%' % (box[4] * 100,), (box[0] + box[2] // 2 - 20, box[1]),
                                     cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,
-                                    self.class_colors[n], 1)
+                                    self.class_colors[name], 1)
 
-                self.logger.info('[%s] %s' % (FrameProcessor.get_filename(current_time), description_ext))
+                        for i, (n, c) in enumerate(top_classes):
+                            cv2.putText(frame, '%s: %.1f%%' % (n, c * 100),
+                                        (box[0] + box[2] + 5, box[1] + 20 * (i + 1)),
+                                        cv2.FONT_HERSHEY_COMPLEX_SMALL, 1,
+                                        self.class_colors[n], 1)
 
+                    self.logger.info('[%s] %s' % (FrameProcessor.get_filename(current_time), description_ext))
+
+        if self.detector is not None:
             # draw rectangles around subframes with movement
             for x, y, w, h in rects:
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
             self.logger.debug('movement detected at %s' % rects)
 
-        # text in the left top of the screen
-        cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30),
-                    cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
+            # text in the left top of the screen
+            cv2.putText(frame, 'Moving object detected' if len(rects) > 0 else 'All clear!', (10, 30),
+                        cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 2)
 
         # timestamp in the left bottom of the screen
         cv2.putText(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3],
@@ -173,10 +178,12 @@ class FrameProcessor:
                                       self.class_colors[name], thickness=2)
 
         # add frame to multiframe
-        if self.multiscreen:
+        if self.multiscreen and self.detector is not None:
             multiframe[:y_mid, x_mid:, :] = cv2.resize(frame, (x_mid, y_mid))
+            screen = multiframe
+        else:
+            screen = frame
 
-        screen = multiframe if self.multiscreen else frame
         if self.max_screen_size is not None and screen.shape[1] > self.max_screen_size:
             screen = cv2.resize(screen, (self.max_screen_size * screen.shape[1] // screen.shape[0],
                                          self.max_screen_size))
