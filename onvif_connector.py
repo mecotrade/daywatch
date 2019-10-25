@@ -20,10 +20,9 @@ class MyONVIFCamera(ONVIFCamera):
 
 class ONVIFConnector:
 
-    def __init__(self, host, port, login, password, logger, move_time=0.5):
+    def __init__(self, host, port, login, password, logger):
 
         self.logger = logger
-        self.move_time = move_time
 
         cam = MyONVIFCamera(host, port, login, password)
         logger.info('connected to ONVIF camera')
@@ -46,36 +45,25 @@ class ONVIFConnector:
         self.stop_request.ProfileToken = media_profile.token
 
     def stop(self):
+        self.logger.debug('stop requested')
         self.stop_request.PanTilt = True
         self.stop_request.Zoom = True
-        result = self.ptz.Stop(self.stop_request)
-        self.logger.debug('camera stopped: %s' % result)
+        self.ptz.Stop(self.stop_request)
+        self.logger.debug('camera stopped')
+
+    def continuous_move(self, pan_velocity, tilt_velocity):
+        self.logger.debug('move requested with pan: %.1f, tilt: %.1f' % (pan_velocity, tilt_velocity))
+        self.continuous_move_request.Velocity.PanTilt.x = pan_velocity
+        self.continuous_move_request.Velocity.PanTilt.y = tilt_velocity
+        self.ptz.ContinuousMove(self.continuous_move_request)
+        self.logger.debug('continuous move started')
 
     def perform_move(self, pan_velocity, tilt_velocity, timeout):
         self.logger.debug('move pan: %.1f, tilt: %.1f, time: %.1f' % (pan_velocity, tilt_velocity, timeout))
-        self.continuous_move_request.Velocity.PanTilt.x = pan_velocity
-        self.continuous_move_request.Velocity.PanTilt.y = tilt_velocity
-        result = self.ptz.ContinuousMove(self.continuous_move_request)
-        self.logger.debug('continuous move started: %s' % result)
-        # Wait a certain time
+        self.continuous_move(pan_velocity, tilt_velocity)
         sleep(timeout)
-        self.stop_request.PanTilt = True
-        self.stop_request.Zoom = True
-        result = self.ptz.Stop(self.stop_request)
-        self.logger.debug('camera stopped: %s' % result)
+        self.stop()
 
-    def move(self, pan_velocity, tilt_velocity, timeout):
+    def perform_async_move(self, pan_velocity, tilt_velocity, timeout):
         move_thread = Thread(target=self.perform_move, args=(pan_velocity, tilt_velocity, timeout))
         move_thread.start()
-
-    def move_right(self):
-        self.move(0.1, 0, self.move_time)
-
-    def move_left(self):
-        self.move(-0.1, 0, self.move_time)
-
-    def move_up(self):
-        self.move(0, -0.1, self.move_time)
-
-    def move_down(self):
-        self.move(0, 0.1, self.move_time)

@@ -6,10 +6,11 @@ import yolov3
 
 class RecognitionEngine:
 
-    def __init__(self, n_classes, max_output_size, iou_threshold, confidence_threshold, selector, weights_file):
+    def __init__(self, n_classes, max_output_size, iou_threshold, min_box_conf, min_class_conf, selector, weights_file):
 
         self.iou_threshold = iou_threshold
-        self.confidence_threshold = confidence_threshold
+        self.min_box_conf = min_box_conf
+        self.min_class_conf = min_class_conf
 
         if 'box' == selector:
             self.selector = lambda clusters, boxes: [cluster[np.argmax(boxes[cluster, 4])] for cluster in clusters]
@@ -134,14 +135,16 @@ class RecognitionEngine:
         detections = []
         for boxes in outputs:
 
-            boxes = boxes[boxes[:, 4] > self.confidence_threshold]
+            boxes = boxes[boxes[:, 4] > self.min_box_conf]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
 
-                mean_class_conf = [np.average(boxes[cluster][:, 5:], weights=boxes[cluster][:, 4], axis=0)
-                                   for cluster in clusters]
+                mean_class_conf = np.array([np.average(boxes[cluster][:, 5:], weights=boxes[cluster][:, 4], axis=0)
+                                            for cluster in clusters])
                 boxes = boxes[self.selector(clusters, boxes), :]
                 boxes[:, 5:] = mean_class_conf
+
+                boxes = boxes[np.max(mean_class_conf, axis=1) > self.min_class_conf]
 
                 detections += [boxes.tolist()]
 

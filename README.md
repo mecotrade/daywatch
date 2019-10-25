@@ -26,8 +26,12 @@ When focus on security feed window following hotkeys available:
 * `q` quit
 
 If camera provides ONVIF endpoint and ONVIF credentials are provided  ( `-oc` or `--onvif-credentials` key), 
-the following remote control hotkeys are available:
-* `<arrow up>` move UP
-* `<arrow left>` move LEFT
-* `<arrow right>` move RIGHT
-* `<arrow down>` move DOWN  
+remote control is availabe based on continuous moves. If mouse left button is pressed 
+at the left third part of the image, camera starts moving left, if it is pressed at the
+right third part of the image, camera start moving right, and similar for the upper and
+lower third parts of the image. These moves can be combined: if mouse left button is
+pressed near the corner of the image, camera start moving top-left, top-right,
+bottom-left or bottom-right, depending of the corner. Camera stops when mouse left button
+is released. Due to non-zero latency, camera can stop moving with some delay. While 
+camera is moving, no motion detection and object recognition is performed.
+ 

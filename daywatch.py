@@ -98,7 +98,6 @@ def watch(url):
 
     loop = True
     while loop:
-
         frame = cap.read()
         loop = processor(frame)
 
@@ -123,8 +122,10 @@ if __name__ == '__main__':
                         help='mimimal distance bewteen rectangle edges for rectangles to be separated')
     parser.add_argument('-mos', '--max-output-size', type=int, default=10,
                         help='maximal possible number of detected object for each class')
-    parser.add_argument('-ct', '--confidence-threshold', type=float, default=0.5,
-                        help='when confidence is above this threshold object is considered to be classified')
+    parser.add_argument('-mbc', '--min-box-conf', type=float, default=0.5,
+                        help='when box confidence is above this value object is considered to be detected')
+    parser.add_argument('-mcc', '--min-class-conf', type=float, default=0.5,
+                        help='when class confidence is above this value object is considered to be classified')
     parser.add_argument('-iout', '--iou-threshold', type=float, default=0.5,
                         help='among all intersection boxes containing classified object those whose '
                              'Intersection Over Union (iou) part is greater than this threshold are choosen')
@@ -158,8 +159,6 @@ if __name__ == '__main__':
                         help='if area of overlap box of detected object and background object is greater that this '
                              'value, the object is considered as background. Applied only if --background-file is '
                              'a json file with background object boxes')
-    parser.add_argument('-mcc', '--min_class_conf', default=0.05,
-                        help='minimal class confidence for object to be detected')
     parser.add_argument('-d', '--debug', action='store_true', help='run in debug mode')
     parser.add_argument('-m', '--mjpg', action='store_true', help='connect to MJPG stream source')
     parser.add_argument('-mss', '--max-screen-size', type=int,
@@ -228,7 +227,7 @@ if __name__ == '__main__':
         min_rect_size = args.min_rect_size
     else:
         recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
-                                       args.confidence_threshold, args.selector, args.weights_file)
+                                       args.min_box_conf, args.min_class_conf, args.selector, args.weights_file)
         min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
 
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
