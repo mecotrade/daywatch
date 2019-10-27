@@ -4,7 +4,6 @@ import cv2
 import os
 import sys
 import json
-from collections.abc import Iterable
 
 
 class FrameProcessor:
@@ -14,6 +13,8 @@ class FrameProcessor:
     _SYSTEM_COLOR = (0, 0, 255)
     _GRID_COLOR = (0, 255, 0)
     _BACKGROUND_COLOR = (255, 255, 255)
+    _MOTION_MERGED_BOX_COLOR = (0, 0, 255)
+    _MOTION_BOX_COLOR = (0, 255, 0)
 
     def __init__(self, detector, recognizer, onvif_connector, logger, class_colors, class_names,
                  background_names, background_boxes, min_class_conf, background_overlap,
@@ -61,6 +62,15 @@ class FrameProcessor:
                 if self.detector is not None:
                     self.detector.reset()
 
+    @staticmethod
+    def add_rects_to_multiscreen(multiframe, rects, color):
+        x_mid, y_mid = multiframe.shape[1] // 2, multiframe.shape[0] // 2
+        for x, y, w, h in rects:
+            cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
+                          ((x + w) // 2, y_mid + (y + h) // 2), color, 1)
+            cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
+                          (x_mid + (x + w) // 2, y_mid + (y + h) // 2), color, 1)
+
     def __call__(self, frame):
 
         current_time = datetime.datetime.now()
@@ -81,17 +91,8 @@ class FrameProcessor:
                     for channel in range(frame.shape[2]):
                         multiframe[y_mid:, :x_mid, channel] = frame_delta_small
                         multiframe[y_mid:, x_mid:, channel] = frame_binary_small
-                    for x, y, w, h in motion_rects:
-                        cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
-                                      ((x + w) // 2, y_mid + (y + h) // 2), (0, 255, 0), 1)
-                        cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
-                                      (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (0, 255, 0), 1)
-                    for x, y, w, h in rects:
-                        cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
-                                      ((x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
-                        cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
-                                      (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
-
+                    FrameProcessor.add_rects_to_multiscreen(multiframe, motion_rects, FrameProcessor._MOTION_BOX_COLOR)
+                    FrameProcessor.add_rects_to_multiscreen(multiframe, rects, FrameProcessor._MOTION_MERGED_BOX_COLOR)
             else:
                 # if no movement detector provided, the whole frame is a single input for recognizer
                 rects = [[0, 0, frame.shape[1], frame.shape[0]]]
@@ -129,11 +130,7 @@ class FrameProcessor:
                                     background = True
 
                             if self.multiscreen:
-                                x, y, w, h = box[:4]
-                                cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
-                                              ((x + w) // 2, y_mid + (y + h) // 2), (255, 0, 0), 1)
-                                cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
-                                              (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (255, 0, 0), 1)
+                                FrameProcessor.add_rects_to_multiscreen(multiframe, [box[:4]], self.class_colors[name])
 
                             if not background:
                                 screenshot = True
@@ -170,7 +167,7 @@ class FrameProcessor:
             if self.detector is not None:
                 # draw rectangles around subframes with movement
                 for x, y, w, h in rects:
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), FrameProcessor._MOTION_MERGED_BOX_COLOR, 1)
                 self.logger.debug('movement detected at %s' % rects)
 
                 # text in the left top of the screen
@@ -208,7 +205,8 @@ class FrameProcessor:
                     else:
                         idx = names.index(self.show_background_class)
                         if idx < 0:
-                            self.logger.debug('background name %s not found in background boxes' % self.show_background_class)
+                            self.logger.debug('background name %s not found in background boxes' %
+                                              self.show_background_class)
                             self.show_background_class = None
                         elif idx < len(names) - 1:
                             self.show_background_class = names[idx+1]
