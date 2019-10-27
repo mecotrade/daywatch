@@ -6,17 +6,27 @@ import yolov3
 
 class RecognitionEngine:
 
-    def __init__(self, n_classes, max_output_size, iou_threshold, min_box_conf, min_class_conf, selector, weights_file):
+    def __init__(self, n_classes, max_output_size, iou_threshold, min_box_conf, min_class_conf, min_box_area,
+                 selector, weights_file):
 
         self.iou_threshold = iou_threshold
         self.min_box_conf = min_box_conf
         self.min_class_conf = min_class_conf
+        self.min_box_area = min_box_area
 
         if 'box' == selector:
             self.selector = lambda clusters, boxes: [cluster[np.argmax(boxes[cluster, 4])] for cluster in clusters]
         elif 'class' == selector:
             self.selector = lambda clusters, boxes: [cluster[np.argmax(np.max(boxes[cluster, 5:], axis=-1))]
                                                      for cluster in clusters]
+        elif 'f1' == selector:
+            def argmax_f1_score(cluster, boxes):
+                max_class_conf = np.max(boxes[cluster, 5:], axis=-1)
+                box_conf = boxes[cluster, 4]
+                f1_score = 2 * max_class_conf * box_conf / (max_class_conf + box_conf)
+                return np.argmax(f1_score)
+            self.selector = lambda clusters, boxes: [cluster[argmax_f1_score(cluster, boxes)] for cluster in clusters]
+
         else:
             raise ValueError('Unknown selector %s' % selector)
 
@@ -136,6 +146,7 @@ class RecognitionEngine:
         for boxes in outputs:
 
             boxes = boxes[boxes[:, 4] > self.min_box_conf]
+            boxes = boxes[boxes[:, 2] * boxes[:, 3] > self.min_box_area]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
 

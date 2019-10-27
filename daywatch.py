@@ -21,8 +21,11 @@ from frame_processor import FrameProcessor
 # bufferless VideoCapture
 class VideoCapture:
 
-    def __init__(self, name):
-        self.cap = cv2.VideoCapture(name)
+    def __init__(self, url, retry_interval=10):
+
+        self.url = url
+        self.retry_interval = retry_interval
+
         self.q = queue.Queue()
         t = threading.Thread(target=self._reader)
         t.daemon = True
@@ -31,15 +34,26 @@ class VideoCapture:
     # read frames as soon as they are available, keeping only most recent one
     def _reader(self):
         while True:
-            ret, frame = self.cap.read()
-            if not ret:
+            cap = cv2.VideoCapture(self.url)
+            loop = True
+            try:
+                while loop:
+                    loop, frame = cap.read()
+                    if loop:
+                        while not self.q.empty():
+                            try:
+                                self.q.get_nowait()   # discard previous (unprocessed) frame
+                            except queue.Queue.Empty:
+                                break
+                        self.q.put(frame)
+            except Exception as ex:
+                logger.warning('Connection failed: %s' % ex)
+
+            cap.release()
+            if self.retry_interval > 0:
+                time.sleep(self.retry_interval)
+            else:
                 break
-            while not self.q.empty():
-                try:
-                    self.q.get_nowait()   # discard previous (unprocessed) frame
-                except queue.Queue.Empty:
-                    break
-            self.q.put(frame)
 
     def read(self):
         return self.q.get()
@@ -50,7 +64,7 @@ def get_authorization(credentials):
     return 'Basic %s' % base64string
 
 
-def watch_mjpg(url, credentials):
+def watch_mjpg(url, credentials, retry_interval):
 
     # start main loop
     loop = True
@@ -88,13 +102,16 @@ def watch_mjpg(url, credentials):
                         loop = processor(frame)
 
         except Exception as ex:
-            logger.info('Fail establish communication: %s' % ex)
-            time.sleep(10)
+            logger.warning('Connection failed: %s' % ex)
+            if retry_interval > 0:
+                time.sleep(retry_interval)
+            else:
+                loop = False
 
 
-def watch(url):
+def watch(url, retry_interval):
 
-    cap = VideoCapture(url)
+    cap = VideoCapture(url, retry_interval)
 
     loop = True
     while loop:
@@ -113,9 +130,9 @@ if __name__ == '__main__':
     parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
                         help='minimal size of rectangle to be croped from initial frame for object recognition, '
                              'if not set, recognition model input size is used')
-    parser.add_argument('-mca', '--min-contour-area', type=int, default=250,
+    parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
-    parser.add_argument('-gt', '--gray-threshold', type=int, default=16,
+    parser.add_argument('-gt', '--gray-threshold', type=int, default=32,
                         help='motion detection threshold, if the difference of frames at grayscale is above this '
                              'threshold, motion is detected')
     parser.add_argument('-rs', '--rectangle-separation', type=int, default=5,
@@ -129,9 +146,10 @@ if __name__ == '__main__':
     parser.add_argument('-iout', '--iou-threshold', type=float, default=0.5,
                         help='among all intersection boxes containing classified object those whose '
                              'Intersection Over Union (iou) part is greater than this threshold are choosen')
-    parser.add_argument('-s', '--selector', default='box', choices=('box', 'class'),
-                        help='Select one box out of the cluster based either on the box confidence (for "box" value) '
-                             'or on class confidence (for "class" value)')
+    parser.add_argument('-s', '--selector', default='class', choices=('box', 'class', 'f1'),
+                        help='Select one box out of the cluster based on the box confidence (for "box" value), '
+                             'on class confidence (for "class" value), or on both combined into f1_score '
+                             'for ("f1" value)')
     parser.add_argument('-wf', '--weights_file', default='yolov3.weights',
                         help='file with YOLOv3 weights. \
                         Must be downloaded from https://pjreddie.com/media/files/yolov3.weights')
@@ -169,6 +187,12 @@ if __name__ == '__main__':
                         help='ONVIF connection credentials, if not set, no communication is established')
     parser.add_argument('-nd', '--no-detection', action='store_true', help='no movement detection')
     parser.add_argument('-nr', '--no-recognition', action='store_true', help='no object recognition')
+    parser.add_argument('-ri', '--retry-interval', default=10,
+                        help='interval between connection lost and next attempt to establish connection, '
+                             'if zero, not attemp to reconnect will be done')
+    parser.add_argument('-gs', '--gray-smoothing', default=0.7,
+                        help='to detect motion the movement detector compares new frame with EMA of previous frames,'
+                             'this is the EMA smoothing parameter')
     
     args = parser.parse_args()
 
@@ -227,7 +251,8 @@ if __name__ == '__main__':
         min_rect_size = args.min_rect_size
     else:
         recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
-                                       args.min_box_conf, args.min_class_conf, args.selector, args.weights_file)
+                                       args.min_box_conf, args.min_class_conf, args.min_contour_area,
+                                       args.selector, args.weights_file)
         min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
 
     logger.info('minimal rectangle size is %s' % str(min_rect_size))
@@ -236,7 +261,7 @@ if __name__ == '__main__':
         detector = None
     else:
         detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation,
-                                    args.gray_threshold)
+                                    args.gray_threshold, args.gray_smoothing)
 
     if args.onvif_credentials is not None:
         onvif_connector = ONVIFConnector(urlparse(args.url).hostname, args.onvif_port,
@@ -254,8 +279,8 @@ if __name__ == '__main__':
                           passwd=args.credentials[1]) if args.credentials is not None else args.url
 
     if args.mjpg:
-        watch_mjpg(url, args.credentials)
+        watch_mjpg(url, args.credentials, args.retry_interval)
     else:
-        watch(url)
+        watch(url, args.retry_interval)
 
     logger.info('Stop watching')

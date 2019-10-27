@@ -50,35 +50,43 @@ class FrameProcessor:
         if self.onvif_connector is not None:
             _, _, w, h = cv2.getWindowImageRect(FrameProcessor._WINDOW_LABEL)
 
-            if event == cv2.EVENT_LBUTTONDOWN:
+            if event == cv2.EVENT_RBUTTONDOWN:
                 pan = -1 if x < w // 3 else 1 if x > 2*w // 3 else 0
                 tilt = -1 if y < h // 3 else 1 if y > 2*h // 3 else 0
                 self.onvif_connector.continuous_move(pan, tilt)
                 self.moving = True
-            elif event == cv2.EVENT_LBUTTONUP:
+            elif event == cv2.EVENT_RBUTTONUP:
                 self.onvif_connector.stop()
                 self.moving = False
+                if self.detector is not None:
+                    self.detector.reset()
 
     def __call__(self, frame):
 
         current_time = datetime.datetime.now()
         screenshot = False
 
+        if self.multiscreen:
+            multiframe = np.zeros(frame.shape, dtype=np.uint8)
+            x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
+            multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
+
         if not self.moving:
 
             if self.detector is not None:
+                rects, (frame_delta, frame_binary, motion_rects) = self.detector(frame)
                 if self.multiscreen:
-                    multiframe = np.zeros(frame.shape, dtype=np.uint8)
-                    x_mid, y_mid = frame.shape[1] // 2, frame.shape[0] // 2
-                    multiframe[:y_mid, :x_mid, :] = cv2.resize(frame, (x_mid, y_mid))
-                    rects, frame_delta, frame_binary = self.detector(frame)
                     frame_delta_small = cv2.resize(frame_delta, (x_mid, y_mid))
                     frame_binary_small = cv2.resize(frame_binary, (x_mid, y_mid))
                     for channel in range(frame.shape[2]):
                         multiframe[y_mid:, :x_mid, channel] = frame_delta_small
                         multiframe[y_mid:, x_mid:, channel] = frame_binary_small
-                else:
-                    rects, _, _ = self.detector(frame)
+                    for x, y, w, h in motion_rects:
+                        cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
+                                      ((x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
+                        cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
+                                      (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
+
             else:
                 # if no movement detector provided, the whole frame is a single input for recognizer
                 rects = [[0, 0, frame.shape[1], frame.shape[0]]]
@@ -109,6 +117,12 @@ class FrameProcessor:
                                                           (FrameProcessor.get_filename(current_time),
                                                            overlap_part, name, box[:4]))
                                         break
+
+                            # check if recognized objects have intersection with detected motions
+                            if self.detector is not None:
+                                if np.max([self.detector.intersect(box, r) for r in motion_rects]) == 0:
+                                    background = True
+
                             if not background:
                                 screenshot = True
 
@@ -153,14 +167,6 @@ class FrameProcessor:
 
         else:
             cv2.putText(frame, 'Camera moving', (10, 30), cv2.FONT_HERSHEY_COMPLEX, 1, FrameProcessor._SYSTEM_COLOR, 2)
-
-            h, w, _ = frame.shape
-            x_l, x_r = w // 3, w * 2 // 3
-            y_t, y_b = h // 3, h * 2 // 3
-            cv2.line(frame, (x_l, 0), (x_l, h), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(frame, (x_r, 0), (x_r, h), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(frame, (0, y_t), (w, y_t), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(frame, (0, y_b), (w, y_b), FrameProcessor._GRID_COLOR, 1)
 
         # timestamp in the left bottom of the screen
         FrameProcessor.put_text(frame, current_time.strftime('%A %d %B %Y %H:%M:%S.%f')[:-3], 10, frame.shape[0] - 10,
@@ -220,6 +226,16 @@ class FrameProcessor:
             screen = multiframe
         else:
             screen = frame
+
+        if self.moving:
+
+            h, w, _ = frame.shape
+            x_l, x_r = w // 3, w * 2 // 3
+            y_t, y_b = h // 3, h * 2 // 3
+            cv2.line(screen, (x_l, 0), (x_l, h), FrameProcessor._GRID_COLOR, 1)
+            cv2.line(screen, (x_r, 0), (x_r, h), FrameProcessor._GRID_COLOR, 1)
+            cv2.line(screen, (0, y_t), (w, y_t), FrameProcessor._GRID_COLOR, 1)
+            cv2.line(screen, (0, y_b), (w, y_b), FrameProcessor._GRID_COLOR, 1)
 
         if self.max_screen_size is not None and screen.shape[1] > self.max_screen_size:
             screen = cv2.resize(screen, (self.max_screen_size * screen.shape[1] // screen.shape[0],
