@@ -146,7 +146,7 @@ class RecognitionEngine:
         for boxes in outputs:
 
             boxes = boxes[boxes[:, 4] > self.min_box_conf]
-            boxes = boxes[boxes[:, 2] * boxes[:, 3] > self.min_box_area]
+            boxes = boxes[(boxes[:, 2] * boxes[:, 3]) > self.min_box_area]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
 
