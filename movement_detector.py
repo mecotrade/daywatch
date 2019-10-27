@@ -104,9 +104,9 @@ class MovementDetector:
         cnts = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cnts = cnts[-2]
 
-        raw_rects = self.produce_rects(cnts)
-        rects = self.merge_rects(self.adjust_rects(raw_rects, (frame.shape[1], frame.shape[0])))
+        motion_rects = self.produce_rects(cnts)
+        rects = self.merge_rects(self.adjust_rects(motion_rects, (frame.shape[1], frame.shape[0])))
 
         self.last_gray = (self.last_gray * self.gray_smoothing + gray * (1 - self.gray_smoothing)).astype(np.uint8)
 
-        return rects, (frame_delta, frame_binary, raw_rects)
+        return rects, (frame_delta, frame_binary, motion_rects)

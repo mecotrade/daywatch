@@ -83,6 +83,11 @@ class FrameProcessor:
                         multiframe[y_mid:, x_mid:, channel] = frame_binary_small
                     for x, y, w, h in motion_rects:
                         cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
+                                      ((x + w) // 2, y_mid + (y + h) // 2), (0, 255, 0), 1)
+                        cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
+                                      (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (0, 255, 0), 1)
+                    for x, y, w, h in rects:
+                        cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
                                       ((x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
                         cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
                                       (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (0, 0, 255), 1)
@@ -122,6 +127,13 @@ class FrameProcessor:
                             if self.detector is not None:
                                 if np.max([self.detector.intersect(box, r) for r in motion_rects]) == 0:
                                     background = True
+
+                            if self.multiscreen:
+                                x, y, w, h = box[:4]
+                                cv2.rectangle(multiframe, (x // 2, y_mid + y // 2),
+                                              ((x + w) // 2, y_mid + (y + h) // 2), (255, 0, 0), 1)
+                                cv2.rectangle(multiframe, (x_mid + x // 2, y_mid + y // 2),
+                                              (x_mid + (x + w) // 2, y_mid + (y + h) // 2), (255, 0, 0), 1)
 
                             if not background:
                                 screenshot = True
