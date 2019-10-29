@@ -1,35 +1,29 @@
+import numpy as np
 import cv2
 
 
 class MovementDetector:
 
-    def __init__(self, min_contour_area, min_rect_size, rectangle_separation, gray_threshold):
+    def __init__(self, min_contour_area, rectangle_separation, gray_threshold, gray_smoothing):
 
         self.min_contour_area = min_contour_area
-        self.min_rect_size = min_rect_size
         self.rectangle_separation = rectangle_separation
         self.gray_threshold = gray_threshold
+        self.gray_smoothing = gray_smoothing
 
         self.last_gray = None
 
-    def produce_rects(self, contours, frame_size):
+    def reset(self):
+
+        self.last_gray = None
+
+    def produce_rects(self, contours):
 
         rects = []
         for contour in contours:
-
             # process contour only if is is large enough
             if cv2.contourArea(contour) >= self.min_contour_area:
-
-                # adjust bounding box of the contour to be at least as large as minimum size
-                # detecting model input size is a good first guess for the minimum size
                 x, y, w, h = cv2.boundingRect(contour)
-                if w < self.min_rect_size[0]:
-                    x = min(max(0, x - (self.min_rect_size[0] - w) // 2), frame_size[0] - self.min_rect_size[0])
-                    w = self.min_rect_size[0]
-                if h < self.min_rect_size[1]:
-                    y = min(max(0, y - (self.min_rect_size[1] - h) // 2), frame_size[1] - self.min_rect_size[1])
-                    h = self.min_rect_size[1]
-
                 rects += [[x, y, w, h]]
 
         return rects
@@ -91,8 +85,9 @@ class MovementDetector:
         cnts = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cnts = cnts[-2]
 
-        rects = self.merge_rects(self.produce_rects(cnts, (frame.shape[1], frame.shape[0])))
+        motion_rects = self.produce_rects(cnts)
+        rects = self.merge_rects(motion_rects)
 
-        self.last_gray = gray
+        self.last_gray = (self.last_gray * self.gray_smoothing + gray * (1 - self.gray_smoothing)).astype(np.uint8)
 
-        return rects, frame_delta, frame_binary
+        return rects, (frame_delta, frame_binary, motion_rects)
