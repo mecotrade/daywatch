@@ -26,23 +26,27 @@ class VideoCapture:
         self.url = url
         self.retry_interval = retry_interval
 
+        self.frames_count = 0
+        self.frames_discarded = 0
         self.q = queue.Queue()
-        t = threading.Thread(target=self._reader)
+        t = threading.Thread(target=self.run)
         t.daemon = True
         t.start()
 
     # read frames as soon as they are available, keeping only most recent one
-    def _reader(self):
+    def run(self):
         while True:
             cap = cv2.VideoCapture(self.url)
             loop = True
             try:
                 while loop:
                     loop, frame = cap.read()
+                    self.frames_count += 1
                     if loop:
                         while not self.q.empty():
                             try:
                                 self.q.get_nowait()   # discard previous (unprocessed) frame
+                                self.frames_discarded += 1
                             except queue.Queue.Empty:
                                 break
                         self.q.put(frame)
@@ -127,15 +131,12 @@ if __name__ == '__main__':
                              '{user} and {passwd}, if so, they will be filled with provided credentials')
     parser.add_argument('-c', '--credentials', nargs=2,
                         help='credential, username and password')
-    parser.add_argument('-mrs', '--min-rect-size', type=int, nargs=2,
-                        help='minimal size of rectangle to be croped from initial frame for object recognition, '
-                             'if not set, recognition model input size is used')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
     parser.add_argument('-gt', '--gray-threshold', type=int, default=32,
                         help='motion detection threshold, if the difference of frames at grayscale is above this '
                              'threshold, motion is detected')
-    parser.add_argument('-rs', '--rectangle-separation', type=int, default=5,
+    parser.add_argument('-rs', '--rectangle-separation', type=int, default=20,
                         help='mimimal distance bewteen rectangle edges for rectangles to be separated')
     parser.add_argument('-mos', '--max-output-size', type=int, default=10,
                         help='maximal possible number of detected object for each class')
@@ -253,14 +254,13 @@ if __name__ == '__main__':
         recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
                                        args.min_box_conf, args.min_class_conf, args.min_contour_area,
                                        args.selector, args.weights_file)
-        min_rect_size = args.min_rect_size if args.min_rect_size else recognizer.model_size
 
-    logger.info('minimal rectangle size is %s' % str(min_rect_size))
+    logger.info('recognizer model size is %s' % str(recognizer.model_size))
 
     if args.no_detection:
         detector = None
     else:
-        detector = MovementDetector(args.min_contour_area, min_rect_size, args.rectangle_separation,
+        detector = MovementDetector(args.min_contour_area, args.rectangle_separation,
                                     args.gray_threshold, args.gray_smoothing)
 
     if args.onvif_credentials is not None:

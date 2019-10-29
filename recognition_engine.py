@@ -47,8 +47,19 @@ class RecognitionEngine:
 
     def __call__(self, frame, rects):
 
+        # adjust bounding box of the contour to be at least as large as model size
+        adjusted_rects = []
+        for x, y, w, h in rects:
+            if w < self.model_size[0]:
+                x = min(max(0, x - (self.model_size[0] - w) // 2), frame.shape[1] - self.model_size[0])
+                w = self.model_size[0]
+            if h < self.model_size[1]:
+                y = min(max(0, y - (self.model_size[1] - h) // 2), frame.shape[0] - self.model_size[1])
+                h = self.model_size[1]
+            adjusted_rects += [[x, y, w, h]]
+
         subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size, interpolation=cv2.INTER_CUBIC)
-                     for x, y, w, h in rects]
+                     for x, y, w, h in adjusted_rects]
         # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes...]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
         detections = self.detect(outputs_value)
@@ -61,7 +72,8 @@ class RecognitionEngine:
                 y_obj = int(y + box[1] * y_scale)
                 w_obj = int(x + box[2] * x_scale) - x_obj
                 h_obj = int(y + box[3] * y_scale) - y_obj
-                objects += [[x_obj, y_obj, w_obj, h_obj] + box[4:]]
+                if w_obj * h_obj > self.min_box_area:
+                    objects += [[x_obj, y_obj, w_obj, h_obj] + box[4:]]
 
         return objects
 
@@ -132,13 +144,14 @@ class RecognitionEngine:
                 where (x1, y1) is upper-right coordinate of the box,
                 (x2, y2) is lower-left coordinate of the box,
                 conf is the confidence of the box, and
-                class1, class2, ... are confidence of the classes
+                class1, class2, ... are confidence of classes
         :return:
                 list (one item per subframe) of list (one box per object)
-                of [x1, y1, w, h, conf, class1, class2, ...],
-                where (x1, y1) is upper-left box coordinate, w is the box width,
-                h is the box height, conf is the box confidence, and
-                class1, class2, ... are class confidences
+                of [x1, y1, x2, y2, conf, class1, class2, ...],
+                where (x1, y1) is upper-left box coordinate,
+                (x2, y2) is lower-left coordinate of the box,
+                conf is the confidence of the box, and
+                class1, class2, ... are confidences of classes
         """
         boxes_dicts = []
 
@@ -146,7 +159,6 @@ class RecognitionEngine:
         for boxes in outputs:
 
             boxes = boxes[boxes[:, 4] > self.min_box_conf]
-            boxes = boxes[(boxes[:, 2] * boxes[:, 3]) > self.min_box_area]
             if len(boxes) > 0:
                 clusters = self.clusterize(boxes[:, :4])
 

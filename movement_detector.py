@@ -4,10 +4,9 @@ import cv2
 
 class MovementDetector:
 
-    def __init__(self, min_contour_area, min_rect_size, rectangle_separation, gray_threshold, gray_smoothing):
+    def __init__(self, min_contour_area, rectangle_separation, gray_threshold, gray_smoothing):
 
         self.min_contour_area = min_contour_area
-        self.min_rect_size = min_rect_size
         self.rectangle_separation = rectangle_separation
         self.gray_threshold = gray_threshold
         self.gray_smoothing = gray_smoothing
@@ -24,28 +23,10 @@ class MovementDetector:
         for contour in contours:
             # process contour only if is is large enough
             if cv2.contourArea(contour) >= self.min_contour_area:
-                rects += [cv2.boundingRect(contour)]
+                x, y, w, h = cv2.boundingRect(contour)
+                rects += [[x, y, w, h]]
 
         return rects
-
-    def adjust_rects(self, rects, frame_size):
-
-        adjusted_rects = []
-        for x, y, w, h in rects:
-
-            # adjust bounding box of the contour to be at least as large as minimum size
-            # detecting model input size is a good first guess for the minimum size
-            if self.min_rect_size is not None:
-                if w < self.min_rect_size[0]:
-                    x = min(max(0, x - (self.min_rect_size[0] - w) // 2), frame_size[0] - self.min_rect_size[0])
-                    w = self.min_rect_size[0]
-                if h < self.min_rect_size[1]:
-                    y = min(max(0, y - (self.min_rect_size[1] - h) // 2), frame_size[1] - self.min_rect_size[1])
-                    h = self.min_rect_size[1]
-
-            adjusted_rects += [[x, y, w, h]]
-
-        return adjusted_rects
 
     def intersect(self, a, b):
         return not ((a[0] + a[2] <= b[0] - self.rectangle_separation) or
@@ -105,7 +86,7 @@ class MovementDetector:
         cnts = cnts[-2]
 
         motion_rects = self.produce_rects(cnts)
-        rects = self.merge_rects(self.adjust_rects(motion_rects, (frame.shape[1], frame.shape[0])))
+        rects = self.merge_rects(motion_rects)
 
         self.last_gray = (self.last_gray * self.gray_smoothing + gray * (1 - self.gray_smoothing)).astype(np.uint8)
 

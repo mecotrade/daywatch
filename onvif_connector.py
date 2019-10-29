@@ -5,7 +5,7 @@ from threading import Thread
 import re
 
 
-class MyONVIFCamera(ONVIFCamera):
+class PublicONVIFCamera(ONVIFCamera):
 
     def __init__(self, host, port, user, passwd):
         super().__init__(host, port, user, passwd)
@@ -24,7 +24,7 @@ class ONVIFConnector:
 
         self.logger = logger
 
-        cam = MyONVIFCamera(host, port, login, password)
+        cam = PublicONVIFCamera(host, port, login, password)
         logger.info('connected to ONVIF camera')
 
         media = cam.create_media_service()
