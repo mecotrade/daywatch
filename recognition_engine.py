@@ -65,7 +65,7 @@ class RecognitionEngine:
         detections = self.detect(outputs_value)
 
         objects = []
-        for (x, y, w, h), boxes in zip(rects, detections):
+        for (x, y, w, h), boxes in zip(adjusted_rects, detections):
             x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
             for box in boxes:
                 x_obj = int(x + box[0] * x_scale)
