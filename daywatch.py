@@ -133,11 +133,14 @@ if __name__ == '__main__':
                         help='credential, username and password')
     parser.add_argument('-mca', '--min-contour-area', type=int, default=1000,
                         help='minimal area of the contour with detected motion')
-    parser.add_argument('-gt', '--gray-threshold', type=int, default=32,
+    parser.add_argument('-gt', '--gray-threshold', type=int, default=20,
                         help='motion detection threshold, if the difference of frames at grayscale is above this '
                              'threshold, motion is detected')
     parser.add_argument('-rs', '--rectangle-separation', type=int, default=20,
                         help='mimimal distance bewteen rectangle edges for rectangles to be separated')
+    parser.add_argument('-mrs', '--min_rect_size', type=int, nargs=2,
+                        help='minimal size of rectangle where motion is detected, if not set the recognitin model '
+                             'size is used, if no recognition is applied, rectangles are shown as they are')
     parser.add_argument('-mos', '--max-output-size', type=int, default=10,
                         help='maximal possible number of detected object for each class')
     parser.add_argument('-mbc', '--min-box-conf', type=float, default=0.5,
@@ -191,9 +194,9 @@ if __name__ == '__main__':
     parser.add_argument('-ri', '--retry-interval', default=10,
                         help='interval between connection lost and next attempt to establish connection, '
                              'if zero, not attemp to reconnect will be done')
-    parser.add_argument('-gs', '--gray-smoothing', default=0.7,
-                        help='to detect motion the movement detector compares new frame with EMA of previous frames,'
-                             'this is the EMA smoothing parameter')
+    parser.add_argument('-gsi', '--gray-sma-interval', type=int, default=10,
+                        help='to detect motion the movement detector compares new frame with SMA of previous frames,'
+                             'the SMA interval is set here')
     
     args = parser.parse_args()
 
@@ -247,21 +250,23 @@ if __name__ == '__main__':
     colors = [(255, 0, 0)] * len(class_names)
     class_colors = {n: colors[i] for i, n in enumerate(class_names)}
 
+    min_rect_size = args.min_rect_size
     if args.no_recognition:
         recognizer = None
-        min_rect_size = args.min_rect_size
     else:
         recognizer = RecognitionEngine(len(class_names), args.max_output_size, args.iou_threshold,
-                                       args.min_box_conf, args.min_class_conf, args.min_contour_area,
+                                       args.min_box_conf, args.min_contour_area,
                                        args.selector, args.weights_file)
+        if min_rect_size is None:
+            min_rect_size = recognizer.model_size
 
-    logger.info('recognizer model size is %s' % str(recognizer.model_size))
+    logger.info('recognizer model size is %s' % str(min_rect_size))
 
     if args.no_detection:
         detector = None
     else:
         detector = MovementDetector(args.min_contour_area, args.rectangle_separation,
-                                    args.gray_threshold, args.gray_smoothing)
+                                    args.gray_threshold, args.gray_sma_interval, min_rect_size)
 
     if args.onvif_credentials is not None:
         onvif_connector = ONVIFConnector(urlparse(args.url).hostname, args.onvif_port,

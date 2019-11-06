@@ -95,7 +95,7 @@ class FrameProcessor:
                     FrameProcessor.add_rects_to_multiscreen(multiframe, rects, FrameProcessor._MOTION_MERGED_BOX_COLOR)
             else:
                 # if no movement detector provided, the whole frame is a single input for recognizer
-                rects = [[0, 0, frame.shape[1], frame.shape[0]]]
+                motion_rects = rects = [[0, 0, frame.shape[1], frame.shape[0]]]
 
             # inspect subframes with movement
             if self.recognizer is not None:
@@ -166,7 +166,7 @@ class FrameProcessor:
 
             if self.detector is not None:
                 # draw rectangles around subframes with movement
-                for x, y, w, h in rects:
+                for x, y, w, h in motion_rects:
                     cv2.rectangle(frame, (x, y), (x + w, y + h), FrameProcessor._MOTION_MERGED_BOX_COLOR, 1)
                 self.logger.debug('movement detected at %s' % rects)
 

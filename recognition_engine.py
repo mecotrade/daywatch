@@ -6,12 +6,11 @@ import yolov3
 
 class RecognitionEngine:
 
-    def __init__(self, n_classes, max_output_size, iou_threshold, min_box_conf, min_class_conf, min_box_area,
+    def __init__(self, n_classes, max_output_size, iou_threshold, min_box_conf, min_box_area,
                  selector, weights_file):
 
         self.iou_threshold = iou_threshold
         self.min_box_conf = min_box_conf
-        self.min_class_conf = min_class_conf
         self.min_box_area = min_box_area
 
         if 'box' == selector:
@@ -47,25 +46,14 @@ class RecognitionEngine:
 
     def __call__(self, frame, rects):
 
-        # adjust bounding box of the contour to be at least as large as model size
-        adjusted_rects = []
-        for x, y, w, h in rects:
-            if w < self.model_size[0]:
-                x = min(max(0, x - (self.model_size[0] - w) // 2), frame.shape[1] - self.model_size[0])
-                w = self.model_size[0]
-            if h < self.model_size[1]:
-                y = min(max(0, y - (self.model_size[1] - h) // 2), frame.shape[0] - self.model_size[1])
-                h = self.model_size[1]
-            adjusted_rects += [[x, y, w, h]]
-
         subframes = [cv2.resize(frame[y:y + h, x:x + w, :], self.model_size, interpolation=cv2.INTER_CUBIC)
-                     for x, y, w, h in adjusted_rects]
+                     for x, y, w, h in rects]
         # output values are [top_left_x, top_left_y, bottom_right_x, bottom_right_y, confidence, classes...]
         outputs_value = self.sess.run(self.outputs, feed_dict={self.inputs: subframes})
         detections = self.detect(outputs_value)
 
         objects = []
-        for (x, y, w, h), boxes in zip(adjusted_rects, detections):
+        for (x, y, w, h), boxes in zip(rects, detections):
             x_scale, y_scale = w / self.model_size[0], h / self.model_size[1]
             for box in boxes:
                 x_obj = int(x + box[0] * x_scale)
@@ -166,8 +154,6 @@ class RecognitionEngine:
                                             for cluster in clusters])
                 boxes = boxes[self.selector(clusters, boxes), :]
                 boxes[:, 5:] = mean_class_conf
-
-                boxes = boxes[np.max(mean_class_conf, axis=1) > self.min_class_conf]
 
                 detections += [boxes.tolist()]
 

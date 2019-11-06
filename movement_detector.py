@@ -4,29 +4,21 @@ import cv2
 
 class MovementDetector:
 
-    def __init__(self, min_contour_area, rectangle_separation, gray_threshold, gray_smoothing):
+    def __init__(self, min_contour_area, rectangle_separation, gray_threshold, gray_sma_interval, min_size):
 
         self.min_contour_area = min_contour_area
         self.rectangle_separation = rectangle_separation
         self.gray_threshold = gray_threshold
-        self.gray_smoothing = gray_smoothing
+        self.gray_sma_interval = gray_sma_interval
+        self.min_size = min_size
 
-        self.last_gray = None
+        self.gray_buffer = None
+        self.gary_pointer = 0
 
     def reset(self):
 
-        self.last_gray = None
-
-    def produce_rects(self, contours):
-
-        rects = []
-        for contour in contours:
-            # process contour only if is is large enough
-            if cv2.contourArea(contour) >= self.min_contour_area:
-                x, y, w, h = cv2.boundingRect(contour)
-                rects += [[x, y, w, h]]
-
-        return rects
+        self.gray_buffer = None
+        self.gary_pointer = 0
 
     def intersect(self, a, b):
         return not ((a[0] + a[2] <= b[0] - self.rectangle_separation) or
@@ -64,17 +56,35 @@ class MovementDetector:
             rects = new_rects
         return rects
 
+    def adjust_rects(self, rects, frame_size):
+        adjusted_rects = []
+        for x, y, w, h in rects:
+            if w < self.min_size[0]:
+                x = min(max(0, x - (self.min_size[0] - w) // 2), frame_size[0] - self.min_size[0])
+                w = self.min_size[0]
+            if h < self.min_size[1]:
+                y = min(max(0, y - (self.min_size[1] - h) // 2), frame_size[1] - self.min_size[1])
+                h = self.min_size[1]
+            adjusted_rects += [[x, y, w, h]]
+
+        return adjusted_rects
+
     def __call__(self, frame):
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
-        # init last gray frame at the very first call
-        if self.last_gray is None:
-            self.last_gray = gray
+        if self.gray_buffer is None:
+            self.gray_buffer = np.tile(gray, (self.gray_sma_interval, 1, 1))
+            self.gray_pointer = 0
+        else:
+            self.gray_pointer = (self.gray_pointer + 1) % self.gray_sma_interval
+            self.gray_buffer[self.gray_pointer] = gray
+
+        mean_gray = np.mean(self.gray_buffer, axis=0)
 
         # compute the absolute difference between the current frame and previous frame
-        frame_delta = cv2.absdiff(self.last_gray, gray)
+        frame_delta = cv2.absdiff(mean_gray.astype(np.uint8), gray)
         frame_binary = cv2.threshold(frame_delta, self.gray_threshold, 255, cv2.THRESH_BINARY)[1]
 
         # dilate the thresholded image to fill in holes, then find contours on thresholded image
@@ -85,9 +95,10 @@ class MovementDetector:
         cnts = cv2.findContours(frame_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cnts = cnts[-2]
 
-        motion_rects = self.produce_rects(cnts)
-        rects = self.merge_rects(motion_rects)
+        motion_rects = self.merge_rects([list(cv2.boundingRect(contour)) for contour in cnts])
+        # filter out motion rects with small ares
+        motion_rects = [[x, y, w, h] for x, y, w, h in motion_rects if w*h > self.min_contour_area]
 
-        self.last_gray = (self.last_gray * self.gray_smoothing + gray * (1 - self.gray_smoothing)).astype(np.uint8)
+        rects = self.merge_rects(self.adjust_rects(motion_rects, (frame.shape[1], frame.shape[0])))
 
         return rects, (frame_delta, frame_binary, motion_rects)
