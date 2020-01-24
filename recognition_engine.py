@@ -141,8 +141,6 @@ class RecognitionEngine:
                 conf is the confidence of the box, and
                 class1, class2, ... are confidences of classes
         """
-        boxes_dicts = []
-
         detections = []
         for boxes in outputs:
 
@@ -155,7 +153,7 @@ class RecognitionEngine:
                 boxes = boxes[self.selector(clusters, boxes), :]
                 boxes[:, 5:] = mean_class_conf
 
-                detections += [boxes.tolist()]
+            detections += [boxes.tolist()]
 
         return detections
 

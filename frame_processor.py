@@ -39,9 +39,9 @@ class FrameProcessor:
         self.show_background = False
         self.show_background_class = None
         self.moving = False
+        self.screen_shape = None
 
         cv2.namedWindow(FrameProcessor._WINDOW_LABEL, cv2.WINDOW_NORMAL)
-        cv2.setMouseCallback(FrameProcessor._WINDOW_LABEL, self.mouse_callback)
 
         self.logger.info('Python version: %s' % sys.version)
         self.logger.info('OpenCV version: %s' % cv2.__version__)
@@ -49,14 +49,14 @@ class FrameProcessor:
     def mouse_callback(self, event, x, y, flags, param):
 
         if self.onvif_connector is not None:
-            _, _, w, h = cv2.getWindowImageRect(FrameProcessor._WINDOW_LABEL)
+            w, h = param[1], param[0]
 
-            if event == cv2.EVENT_RBUTTONDOWN:
+            if event == cv2.EVENT_LBUTTONDOWN:
                 pan = -1 if x < w // 3 else 1 if x > 2*w // 3 else 0
                 tilt = -1 if y < h // 3 else 1 if y > 2*h // 3 else 0
                 self.onvif_connector.continuous_move(pan, tilt)
                 self.moving = True
-            elif event == cv2.EVENT_RBUTTONUP:
+            elif event == cv2.EVENT_LBUTTONUP:
                 self.onvif_connector.stop()
                 self.moving = False
                 if self.detector is not None:
@@ -72,6 +72,11 @@ class FrameProcessor:
                           (x_mid + (x + w) // 2, y_mid + (y + h) // 2), color, 1)
 
     def __call__(self, frame):
+
+        if self.screen_shape is None \
+                or self.screen_shape[0] != frame.shape[0] or self.screen_shape[1] != frame.shape[1]:
+            self.screen_shape = frame.shape[:2]
+            cv2.setMouseCallback(FrameProcessor._WINDOW_LABEL, self.mouse_callback, param=self.screen_shape)
 
         current_time = datetime.datetime.now()
         screenshot = False
@@ -239,13 +244,18 @@ class FrameProcessor:
 
         if self.moving:
 
-            h, w, _ = frame.shape
+            # actual width and height of the window
+            _, _, w_wnd, h_wnd = cv2.getWindowImageRect(FrameProcessor._WINDOW_LABEL)
+            h, w = self.screen_shape
+
+            width_h, width_w = h // h_wnd, w // w_wnd
+
             x_l, x_r = w // 3, w * 2 // 3
             y_t, y_b = h // 3, h * 2 // 3
-            cv2.line(screen, (x_l, 0), (x_l, h), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(screen, (x_r, 0), (x_r, h), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(screen, (0, y_t), (w, y_t), FrameProcessor._GRID_COLOR, 1)
-            cv2.line(screen, (0, y_b), (w, y_b), FrameProcessor._GRID_COLOR, 1)
+            cv2.line(screen, (x_l, 0), (x_l, h), FrameProcessor._GRID_COLOR, width_w)
+            cv2.line(screen, (x_r, 0), (x_r, h), FrameProcessor._GRID_COLOR, width_w)
+            cv2.line(screen, (0, y_t), (w, y_t), FrameProcessor._GRID_COLOR, width_h)
+            cv2.line(screen, (0, y_b), (w, y_b), FrameProcessor._GRID_COLOR, width_h)
 
         if self.max_screen_size is not None and screen.shape[1] > self.max_screen_size:
             screen = cv2.resize(screen, (self.max_screen_size * screen.shape[1] // screen.shape[0],
